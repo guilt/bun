@@ -1,0 +1,46 @@
+diff --git a/vendor/mimalloc/src/prim/windows/prim.c b/vendor/mimalloc/src/prim/windows/prim.c
+index 8a0a332..f1a933f 100644
+--- a/vendor/mimalloc/src/prim/windows/prim.c
++++ b/vendor/mimalloc/src/prim/windows/prim.c
+@@ -686,18 +686,39 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
+ typedef LONG (NTAPI *PBCryptGenRandom)(HANDLE, PUCHAR, ULONG, ULONG);
+ static  PBCryptGenRandom pBCryptGenRandom = NULL;
+ 
++// XP has no bcrypt.dll. Fall back to RtlGenRandom (SystemFunction036, advapi32,
++// available since Windows 2000) so win9x still gets secure randomness.
++typedef BOOLEAN (NTAPI *PRtlGenRandomFn)(PVOID, ULONG);
++static  PRtlGenRandomFn pRtlGenRandom = NULL;
++
+ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
+   mi_assert(buf_len <= ULONG_MAX);
+   if (buf_len > ULONG_MAX) return false;
++  if (pBCryptGenRandom != NULL) {
++    return (pBCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);
++  }
++  if (pRtlGenRandom != NULL) {
++    return (pRtlGenRandom(buf, (ULONG)buf_len) != 0);
++  }
+   mi_atomic_do_once {
+     HINSTANCE hDll = LoadLibrary(TEXT("bcrypt.dll"));
+     if (hDll != NULL) {
+       pBCryptGenRandom = (PBCryptGenRandom)(void (*)(void))GetProcAddress(hDll, "BCryptGenRandom");
+       // FreeLibrary(hDll);  // don't free
+     }
++    if (pBCryptGenRandom == NULL) {
++      // XP: no bcrypt.dll - RtlGenRandom (SystemFunction036) from advapi32.
++      HINSTANCE hAdvapi = LoadLibrary(TEXT("advapi32.dll"));
++      if (hAdvapi != NULL) {
++        pRtlGenRandom = (PRtlGenRandomFn)(void (*)(void))GetProcAddress(hAdvapi, "SystemFunction036");
++      }
++    }
++  }
++  if (pBCryptGenRandom != NULL) {
++    return (pBCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);
+   }
+-  if (pBCryptGenRandom == NULL) return false;
+-  return (pBCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);
++  if (pRtlGenRandom == NULL) return false;
++  return (pRtlGenRandom(buf, (ULONG)buf_len) != 0);
+ }
+ 
+ #endif  // MI_USE_RTLGENRANDOM

@@ -31,6 +31,10 @@ namespace Zig {
 // we tag the final two bits
 // so 56 bits are copied over
 // rest we zero out for consistentcy
+// On 32-bit targets the pointer is only 32 bits wide, so the tag bits move
+// down to 28-31 (matching `bun_alloc::ZigString` on 32-bit): static=28,
+// utf8=29, global=30, utf16=31.
+#if CPU(ADDRESS64)
 static const unsigned char* untag(const unsigned char* ptr)
 {
     return reinterpret_cast<const unsigned char*>(
@@ -62,6 +66,42 @@ static bool isTaggedExternalPtr(const unsigned char* ptr)
 {
     return (reinterpret_cast<uintptr_t>(ptr) & (static_cast<uint64_t>(1) << 62)) != 0;
 }
+#else
+static const unsigned char* untag(const unsigned char* ptr)
+{
+    // 32-bit: tags live in bits 29-31 (utf16=31, global=30, utf8=29). Bit 28
+    // is a real address bit (win9x JS string buffers sit at ~330 MB), so it is
+    // NOT cleared here — clearing it corrupted pointers above 268 MB.
+    return reinterpret_cast<const unsigned char*>(
+        (reinterpret_cast<uintptr_t>(ptr) & ~(static_cast<uintptr_t>(1) << 31) & ~(static_cast<uintptr_t>(1) << 30) & ~(static_cast<uintptr_t>(1) << 29)));
+}
+
+static void* untagVoid(const unsigned char* ptr)
+{
+    return const_cast<void*>(reinterpret_cast<const void*>(untag(ptr)));
+}
+
+static void* untagVoid(const char16_t* ptr)
+{
+    return untagVoid(reinterpret_cast<const unsigned char*>(ptr));
+}
+
+static bool isTaggedUTF16Ptr(const unsigned char* ptr)
+{
+    return (reinterpret_cast<uintptr_t>(ptr) & (static_cast<uintptr_t>(1) << 31)) != 0;
+}
+
+// Do we need to convert the string from UTF-8 to UTF-16?
+static bool isTaggedUTF8Ptr(const unsigned char* ptr)
+{
+    return (reinterpret_cast<uintptr_t>(ptr) & (static_cast<uintptr_t>(1) << 29)) != 0;
+}
+
+static bool isTaggedExternalPtr(const unsigned char* ptr)
+{
+    return (reinterpret_cast<uintptr_t>(ptr) & (static_cast<uintptr_t>(1) << 30)) != 0;
+}
+#endif
 
 static void free_global_string(void* str, void* ptr, unsigned len)
 {
@@ -263,10 +303,17 @@ static const ZigString ZigStringCwd = ZigString { &__dot_char, 1 };
 static const BunString BunStringCwd = BunString { BunStringTag::StaticZigString, ZigStringCwd };
 static const BunString BunStringEmpty = BunString { BunStringTag::Empty, nullptr };
 
+#if CPU(ADDRESS64)
 static const unsigned char* taggedUTF16Ptr(const char16_t* ptr)
 {
     return reinterpret_cast<const unsigned char*>(reinterpret_cast<uintptr_t>(ptr) | (static_cast<uint64_t>(1) << 63));
 }
+#else
+static const unsigned char* taggedUTF16Ptr(const char16_t* ptr)
+{
+    return reinterpret_cast<const unsigned char*>(reinterpret_cast<uintptr_t>(ptr) | (static_cast<uintptr_t>(1) << 31));
+}
+#endif
 
 static ZigString toZigString(WTF::String* str)
 {

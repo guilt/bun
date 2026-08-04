@@ -1,0 +1,45 @@
+diff --git a/Source/bmalloc/mimalloc/mimalloc/src/prim/windows/prim.c b/Source/bmalloc/mimalloc/mimalloc/src/prim/windows/prim.c
+index 27d0a38ed3..f90862c3f1 100644
+--- a/Source/bmalloc/mimalloc/mimalloc/src/prim/windows/prim.c
++++ b/Source/bmalloc/mimalloc/mimalloc/src/prim/windows/prim.c
+@@ -662,15 +662,33 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
+ typedef LONG (NTAPI *PBCryptGenRandom)(HANDLE, PUCHAR, ULONG, ULONG);
+ static  PBCryptGenRandom pBCryptGenRandom = NULL;
+ 
++// XP has no bcrypt.dll. Fall back to RtlGenRandom (SystemFunction036, advapi32,
++// available since Windows 2000) so win9x still gets secure randomness.
++typedef BOOLEAN (NTAPI *PRtlGenRandomFn)(PVOID, ULONG);
++static  PRtlGenRandomFn pRtlGenRandom = NULL;
++
+ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
+-  if (pBCryptGenRandom == NULL) {
+-    HINSTANCE hDll = LoadLibrary(TEXT("bcrypt.dll"));
+-    if (hDll != NULL) {
+-      pBCryptGenRandom = (PBCryptGenRandom)(void (*)(void))GetProcAddress(hDll, "BCryptGenRandom");
+-    }
+-    if (pBCryptGenRandom == NULL) return false;
++  if (pBCryptGenRandom != NULL) {
++    return (pBCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);
++  }
++  if (pRtlGenRandom != NULL) {
++    return (pRtlGenRandom(buf, (ULONG)buf_len) != 0);
++  }
++  // First call: prefer BCryptGenRandom (Vista+); on XP fall back to
++  // RtlGenRandom (SystemFunction036) from advapi32.
++  HINSTANCE hDll = LoadLibrary(TEXT("bcrypt.dll"));
++  if (hDll != NULL) {
++    pBCryptGenRandom = (PBCryptGenRandom)(void (*)(void))GetProcAddress(hDll, "BCryptGenRandom");
++  }
++  if (pBCryptGenRandom != NULL) {
++    return (pBCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);
++  }
++  HINSTANCE hAdvapi = LoadLibrary(TEXT("advapi32.dll"));
++  if (hAdvapi != NULL) {
++    pRtlGenRandom = (PRtlGenRandomFn)(void (*)(void))GetProcAddress(hAdvapi, "SystemFunction036");
+   }
+-  return (pBCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)buf_len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);
++  if (pRtlGenRandom == NULL) return false;
++  return (pRtlGenRandom(buf, (ULONG)buf_len) != 0);
+ }
+ 
+ #endif  // MI_USE_RTLGENRANDOM
