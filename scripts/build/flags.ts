@@ -72,6 +72,11 @@ export const cpuTargetFlags: Flag[] = [
     when: c => c.x64,
     desc: "x64: Nehalem (2008) — no AVX, broadest compatibility",
   },
+  {
+    flag: ["/clang:--target=i586-pc-windows-msvc", "/clang:-march=pentium4"],
+    when: c => c.windows && c.x86,
+    desc: "i586 Win9x: Pentium 4 (SSE2 only)",
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -630,8 +635,15 @@ export const bunOnlyFlags: Flag[] = [
 
   // ─── Bun-target-specific ───
   {
-    flag: ["-fconstexpr-steps=6000000", "-fconstexpr-depth=54"],
-    when: c => c.unix,
+    // clang-cl needs /clang: to reach the clang driver; plain clang takes the
+    // flag directly. `embeddedModules` (win9x) needs it because it embeds the
+    // large builtin-JS byte arrays as constexpr literals — the default step
+    // limit blows up on the ~180 KB node:http bundles.
+    flag: c =>
+      c.windows
+        ? ["/clang:-fconstexpr-steps=6000000", "/clang:-fconstexpr-depth=54"]
+        : ["-fconstexpr-steps=6000000", "-fconstexpr-depth=54"],
+    when: c => c.unix || c.embeddedModules,
     lang: "cxx",
     desc: "Raise constexpr limits (JSC uses heavy constexpr; the embedded module registry literals are large)",
   },
@@ -751,8 +763,8 @@ export const defines: Flag[] = [
   {
     // slash(): path becomes a C string literal — `\U` would be a unicode escape.
     flag: c => `BUN_DYNAMIC_JS_LOAD_PATH=\\"${slash(join(c.buildDir, "js"))}\\"`,
-    when: c => c.debug && !c.ci,
-    desc: "Hot-reload built-in JS from build dir (dev convenience)",
+    when: c => c.debug && !c.ci && !c.embeddedModules,
+    desc: "Hot-reload built-in JS from build dir (dev convenience); win9x embeds instead (deployed away from the build dir)",
   },
   {
     // Standard define that disables assert() in libc headers. CMake adds
@@ -803,6 +815,14 @@ export const defines: Flag[] = [
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const linkerFlags: Flag[] = [
+  {
+    // The ICU static data object (icudt78l_dat.obj — pure data emitted by
+    // genccode) carries no .sxdata SEH table, so lld's /safeseh (on by default
+    // for 32-bit) rejects it. It has no handlers, so disabling safeseh is safe.
+    flag: "/safeseh:no",
+    when: c => c.windows && c.x86,
+    desc: "32-bit data objects (ICU) have no SEH table; lld /safeseh rejects them",
+  },
   // ─── Sanitizers ───
   {
     flag: "-fsanitize=address",
@@ -915,12 +935,58 @@ export const linkerFlags: Flag[] = [
     // autodetect x64 and reject every arm64 input. CMake's Windows-MSVC
     // platform module always set /machine: from CMAKE_SYSTEM_PROCESSOR,
     // which is why the pre-ninja build never needed this in BuildBun.cmake.
-    flag: c => `/machine:${c.arm64 ? "arm64" : "x64"}`,
+    flag: c => `/machine:${c.arm64 ? "arm64" : c.x86 ? "x86" : "x64"}`,
     when: c => c.windows,
     desc: "Target machine type for lld-link (required on arm64; x64 hosts default correctly but explicit is harmless)",
   },
   {
-    // Serviced UCRT overlay: an explicit /libpath: is searched before the
+    // x86 Windows cross-compile (x64 host → x86 target): the x64 VS dev
+    // shell sets %LIB% to x64-only paths, so lld-link finds x64 import
+    // libraries whose symbols lack x86 stdcall decoration. Add explicit
+    // /libpath: so kernel32.lib, advapi32.lib, etc. are loaded from the
+    // correct x86 SDK/MSVC directories (%VCToolsInstallDir%\lib\x86, etc.).
+    // Without this, every Rust extern "C" Windows API reference (cdecl-named
+    // _GetUserNameW) lands at an x64 import lib that only has the undecorated
+    // name (GetUserNameW) — undefined symbol.
+    flag: c => [
+      ...c.windowsX86LibDirs.map(d => `/libpath:"${d}"`),
+      // XP/Win9x subsystem version (5.01 = Windows XP).
+      "/subsystem:console,5.01",
+      // Exclude API set import lib (synchronization.lib) so
+      // WaitOnAddress/WakeByAddress* resolve to our stubs in
+      // win9x_apiset_stubs.cpp instead of generating imports from
+      // api-ms-win-core-synch-l1-2-0.dll (Windows 8+). The stub
+      // also emits #pragma alternatename entries for __imp_ symbols
+      // used by Rust's dllimport so the import objects inside
+      // bun_rust.lib are never extracted.
+      "/NODEFAULTLIB:synchronization.lib",
+      // bcryptprimitives.dll is a Windows 8+ API set (ProcessPrng).
+      // libuv loads it dynamically; skip the static import lib so it
+      // doesn't appear in the PE import table.
+      "/NODEFAULTLIB:bcrypt.lib",
+      // /FORCE:MULTIPLE: bun_rust.lib still contains import objects for
+      // api-ms-win-core-synch and bcryptprimitives (from pre-patch builds).
+      // Our stub .obj comes first in the link → definition wins.
+      "/FORCE:MULTIPLE",
+      // RtlRestoreContext: x86 SDK ntdll.lib exports the cdecl name
+      // (_RtlRestoreContext) but Rust's extern "system" generates stdcall
+      // (_RtlRestoreContext@8). No-op alias bridges the gap.
+      "/alternatename:_RtlRestoreContext@8=_RtlRestoreContext",
+      // inet_pton/inet_ntop: redirect dllimport data references from
+      // ws2_32.lib to our local implementations so lld-link doesn't flag
+      // them as forbidden data imports in delay-loaded ws2_32.dll.
+      "/alternatename:__imp__inet_pton@12=_inet_pton@12",
+      "/alternatename:__imp__inet_ntop@16=_inet_ntop@16",
+      // WSAPoll: redirect dllimport to our select()-based polyfill so the
+      // import table doesn't reference it from ws2_32.dll (XP lacks it).
+      "/alternatename:__imp__WSAPoll@12=_bun_wsapoll_stub@12",
+      "/alternatename:_WSAPoll@12=_bun_wsapoll_stub@12",
+      "/alternatename:_WSAPoll=_bun_wsapoll_stub@12",
+    ],
+    when: c => c.windows && c.x86,
+    desc: "Windows x86: XP subsystem ver + x86 MSVC CRT/SDK import lib paths",
+  },
+  {
     // /winsysroot-derived paths, so its libucrt.lib/ucrt.lib win over the
     // splat's stale copies (see UCRT_SERVICING_VERSION in winsysroot.ts —
     // the VS-manifest payload xwin downloads carries an ancient arm64 UCRT
@@ -948,6 +1014,23 @@ export const linkerFlags: Flag[] = [
     flag: "/DEBUG:FULL",
     when: c => c.windows && c.debug,
     desc: "Emit PDB so the crash handler can symbolize stack traces",
+  },
+  {
+    flag: [
+      // Delay-load DLLs so the __pfnDliFailureHook2 hook in xp_compat.cpp
+      // can intercept GetProcAddress failures on XP and return stubs.
+      // On Win11 all these DLLs exist and export the needed functions so the
+      // hook is never reached. WS2_32 is delay-loaded because WSAPoll
+      // (ordinal 46) is missing on XP; alternatename can't redirect ordinals.
+      // WS2_32.dll is NOT delay-loaded (it exists on XP). Missing exports
+      // (WSAPoll, inet_pton, inet_ntop) are redirected via alternatename
+      // below. Only IPHLPAPI/ADVAPI32/SHELL32 are Vista+.
+      "/delayload:IPHLPAPI.DLL",
+      "/delayload:ADVAPI32.dll",
+      "/delayload:SHELL32.dll",
+    ],
+    when: c => c.windows && c.debug && c.x86,
+    desc: "Delay-load WS2_32/IPHLPAPI/ADVAPI32/SHELL32 (Vista+ exports)",
   },
   {
     flag: [
@@ -1300,8 +1383,11 @@ export const linkerFlags: Flag[] = [
   // ─── Symbols / exports ───
   // These reference files on disk — linkDepends() lists the same paths
   // so ninja relinks when they change (cmake's LINK_DEPENDS equivalent).
+  // x86 uses symbols.x86.def (without v8 C++ mangled symbols: the mangling
+  // differs between 32-bit and 64-bit MSVC, and these symbols are internal
+  // C++ shim implementations, not needed as exports).
   {
-    flag: c => `/DEF:${slash(join(c.cwd, "src/symbols.def"))}`,
+    flag: c => `/DEF:${slash(join(c.cwd, c.x86 ? "src/symbols.x86.def" : "src/symbols.def"))}`,
     when: c => c.windows,
     desc: "Exported symbol definition (.def format)",
   },
@@ -1410,7 +1496,7 @@ export function orderFilePath(cfg: Pick<Config, "buildDir">): string {
  */
 export function linkDepends(cfg: Config): string[] {
   if (cfg.freebsd) return [join(cfg.cwd, "src/symbols.dyn"), join(cfg.cwd, "src/linker-freebsd.lds")];
-  if (cfg.windows) return [join(cfg.cwd, "src/symbols.def")];
+  if (cfg.windows) return [join(cfg.cwd, cfg.x86 ? "src/symbols.x86.def" : "src/symbols.def")];
   if (cfg.darwin) return [join(cfg.cwd, "src/symbols.txt")];
   // linux: ELF dynamic-list + version script, plus the release symbol ordering
   // file — listing it here is what makes regenerating it relink, and only relink.

@@ -272,7 +272,7 @@ const DARWIN = def1([
 // this declares what the UCRT actually has. No ARCHIVE_CRYPTO_*_WIN — we
 // don't need digests for tar/gzip and it would pull in bcrypt.lib.
 // prettier-ignore
-const WINDOWS = def1([
+const WINDOWS = (cfg: Config) => def1([
   "HAVE_IO_H", "HAVE_DIRECT_H", "HAVE_PROCESS_H", "HAVE_SYS_UTIME_H", "HAVE_WINDOWS_H",
   "HAVE_WINCRYPT_H",
   "HAVE__CTIME64_S", "HAVE__FSEEKI64", "HAVE__GET_TIMEZONE", "HAVE__GMTIME64_S",
@@ -286,13 +286,13 @@ const WINDOWS = def1([
 #define id_t short
 #define mode_t unsigned short
 #define pid_t int
-#define ssize_t int64_t
+#define ssize_t ${cfg.x86 ? "long" : "int64_t"}
 `;
 
 function configH(cfg: Config): string {
   const longSize = cfg.windows ? 4 : 8;
   const wcharSize = cfg.windows ? 2 : 4;
-  const platform = cfg.windows ? WINDOWS : `${POSIX}\n${cfg.darwin ? DARWIN : cfg.freebsd ? FREEBSD : LINUX}`;
+  const platform = cfg.windows ? WINDOWS(cfg) : `${POSIX}\n${cfg.darwin ? DARWIN : cfg.freebsd ? FREEBSD : LINUX}`;
 
   // Feature-test macros must come before any system header. archive_platform.h
   // includes config.h first, so defining them here is early enough.

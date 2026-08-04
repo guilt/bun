@@ -98,15 +98,23 @@ const SHARPYUV = [
 // (on arm64 these compile to the stub body and the x86 -m flags are invalid).
 // Runtime CPU dispatch in dsp/cpu.c picks the best available, so a baseline
 // binary still runs on pre-AVX2 hardware.
-function simd(path: string, x64: boolean) {
-  if (x64) {
-    for (const [suf, flag] of [
-      ["_avx2.c", "-mavx2"],
-      ["_sse41.c", "-msse4.1"],
-      ["_sse2.c", "-msse2"],
-    ] as const) {
-      if (path.endsWith(suf)) return { path, cflags: [flag] };
+function simd(path: string, x64: boolean): string | { path: string; cflags: string[] } | undefined {
+  // On x86 (32-bit, SSE2 only), skip files that require SSE4.1 or AVX2.
+  // libwebp's cpu.h gates them on __SSE4_1__/__AVX2__ which clang-cl
+  // doesn't define with -march=pentium4; the intrinsics would fail.
+  if (!x64) {
+    for (const suf of ["_avx2.c", "_sse41.c", "_sse3.c", "_ssse3.c"]) {
+      if (path.endsWith(suf)) return undefined;
     }
+    if (path.endsWith("_sse2.c")) return { path, cflags: ["-msse2"] };
+    return path;
+  }
+  for (const [suf, flag] of [
+    ["_avx2.c", "-mavx2"],
+    ["_sse41.c", "-msse4.1"],
+    ["_sse2.c", "-msse2"],
+  ] as const) {
+    if (path.endsWith(suf)) return { path, cflags: [flag] };
   }
   return path;
 }
@@ -121,17 +129,31 @@ export const libwebp: Dependency = {
     commit: LIBWEBP_COMMIT,
   }),
 
+  // i586 overlay: config.h stub that overrides cpu.h's MSC-based SSE4.1/AVX2
+  // detection (which would fire under clang-cl's _MSC_VER + _M_IX86 even on
+  // plain Pentium 4). Combined with -DHAVE_CONFIG_H=1 in cflags below.
+  patches: (cfg: Config) => cfg.x86 ? ["patches/libwebp/src/webp/config.h"] : [],
+
   build: cfg => ({
     kind: "direct",
     sources: [
       ...DEC.map(f => `src/dec/${f}.c`),
       ...ENC.map(f => `src/enc/${f}.c`),
-      ...DSP.map(f => simd(`src/dsp/${f}.c`, cfg.x64)),
+      ...DSP.flatMap(f => { const r = simd(`src/dsp/${f}.c`, cfg.x64); return r !== undefined ? [r] : []; }),
       ...UTILS.map(f => `src/utils/${f}.c`),
       ...DEMUX.map(f => `src/demux/${f}.c`),
       ...MUX.map(f => `src/mux/${f}.c`),
-      ...SHARPYUV.map(f => simd(`sharpyuv/${f}.c`, cfg.x64)),
+      ...SHARPYUV.flatMap(f => { const r = simd(`sharpyuv/${f}.c`, cfg.x64); return r !== undefined ? [r] : []; }),
     ],
+    // On i586, clang-cl defines _MSC_VER >= 1500 with _M_IX86 which
+    // triggers cpu.h's WEBP_MSC_SSE41 / WEBP_MSC_AVX2 detection (the MSC
+    // path assumes SSE4.1/AVX2 are present on any x86 capable enough to
+    // run those compiler versions), while the actual arch is plain SSE2
+    // (Pentium 4). This makes the dispatch code in the base files call
+    // SSE4.1/AVX2 init functions that we filtered out via simd().  The
+    // fix: define HAVE_CONFIG_H=1 so cpu.h defers to explicit WEBP_HAVE_*
+    // macros, then enable only what we actually have (SSE2).
+    cflags: cfg.x64 ? undefined : ["-DHAVE_CONFIG_H=1", "-DWEBP_HAVE_SSE2=1"],
     // src/webp/*.h is the public API; internal headers use "src/..."
     // includes from the repo root, sharpyuv uses "sharpyuv/...".
     includes: [".", "src"],

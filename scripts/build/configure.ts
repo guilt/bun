@@ -28,7 +28,7 @@ import { Ninja } from "./ninja.ts";
 import { getProfile } from "./profiles.ts";
 import { registerAllRules } from "./rules.ts";
 import { quote } from "./shell.ts";
-import { findBun, findCargo, findMsvcLinker, findSystemTool, resolveLlvmToolchain } from "./tools.ts";
+import { findBun, findCargo, findMsvcLinker, findPerl, findSystemTool, resolveLlvmToolchain } from "./tools.ts";
 import { ensureWindowsSysroot } from "./winsysroot.ts";
 import { checkWorkarounds } from "./workarounds.ts";
 
@@ -77,7 +77,7 @@ export function resolveToolchain(targetOs?: OS): Toolchain {
   // in node). Pre-quoted so rule commands can splice it directly.
   const q = (p: string) => quote(p, host.os === "windows");
   const jsRuntime =
-    process.versions.bun !== undefined ? q(process.execPath) : `${q(process.execPath)} --experimental-strip-types`;
+    process.versions.bun !== undefined ? q(bun) : `${q(process.execPath)} --experimental-strip-types`;
 
   return {
     ...llvm,
@@ -300,9 +300,11 @@ export async function configure(input: ConfigureInput): Promise<ConfigureResult>
   // rust-only/link-only don't run LUT codegen — skip the check so split-CI
   // steps don't require perl on the rust cross-compile box.
   if (cfg.mode === "full" || cfg.mode === "cpp-only") {
-    if (findSystemTool("perl") === undefined) {
-      throw new BuildError("perl not found in PATH", {
-        hint: "LUT codegen (create-hash-table.ts) needs perl. Install it: apt install perl / brew install perl",
+    if (findPerl() === undefined) {
+      throw new BuildError("perl not found", {
+        hint:
+          "LUT codegen (create-hash-table.ts) needs perl. Set PERL5_HOME / PERL_HOME, or " +
+          "add perl to PATH (apt install perl / brew install perl / Git for Windows bundles it).",
       });
     }
   }

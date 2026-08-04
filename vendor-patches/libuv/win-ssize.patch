@@ -1,0 +1,13 @@
+diff --git a/include/uv/win.h b/include/uv/win.h
+index 474b71b..4599dd1 100644
+--- a/include/uv/win.h
++++ b/include/uv/win.h
+@@ -24,7 +24,7 @@
+ #ifndef _WIN32_WINNT
+ # define _WIN32_WINNT   0x0600
+ #endif
+-typedef intptr_t ssize_t;
++typedef SSIZE_T ssize_t;
+ 
+ #if defined(_MSC_VER) || defined(__MINGW64_VERSION_MAJOR)
+ #include <stdint.h>

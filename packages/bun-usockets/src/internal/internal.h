@@ -25,7 +25,7 @@
 #endif
 
 #include <BaseTsd.h>
-typedef SSIZE_T ssize_t;
+// ssize_t is defined by libuv's uv/win.h; don't redefine it here.
 
 #else
 #include <stdalign.h>
@@ -52,6 +52,11 @@ void us_internal_loop_update_pending_ready_polls(struct us_loop_t *loop,
 #endif
 
 /* We only have one networking implementation so far */
+#include <BaseTsd.h>
+#ifndef _SSIZE_T_DEFINED
+#define _SSIZE_T_DEFINED
+typedef SSIZE_T ssize_t;
+#endif
 #include "internal/networking/bsd.h"
 
 /* We have many different eventing implementations */

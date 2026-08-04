@@ -120,6 +120,14 @@ interface Rejection {
  */
 export function findBun(os: OS): string {
   const exe = os === "windows" ? "bun.exe" : "bun";
+  // AUTOEXEC.CMD sets BUN_HOME=%HOME%\.Bun and adds %BUN_HOME%\Bin to PATH.
+  // Honor that (and BUN_INSTALL, the bun.sh installer's var) before the
+  // default curl-install location so a machine that relocated bun works.
+  const bunDir = process.env.BUN_DIR ?? process.env.BUN_HOME ?? process.env.BUN_INSTALL;
+  if (bunDir) {
+    const p = join(bunDir, "bin", exe);
+    if (isExecutable(p)) return p;
+  }
   const userBun = join(homedir(), ".bun", "bin", exe);
   if (isExecutable(userBun)) return userBun;
 
@@ -202,6 +210,7 @@ export function clangTargetArch(clang: string): Arch | undefined {
   // aarch64-pc-windows-msvc, arm64-apple-darwin, x86_64-unknown-linux-gnu, ...
   if (/^(aarch64|arm64)/.test(triple)) return "aarch64";
   if (/^(x86_64|x64|amd64)/i.test(triple)) return "x64";
+  if (/^(i[3456]86)/.test(triple)) return "i586";
   return undefined;
 }
 
@@ -278,6 +287,26 @@ const LLVM_VERSION_RANGE = `>=${LLVM_MAJOR}.${LLVM_MINOR}.0 <${LLVM_MAJOR}.${LLV
 function llvmSearchPaths(os: OS, arch: Arch): string[] {
   const paths: string[] = [];
 
+  // Env-driven locations first — mirror the AUTOEXEC.CMD `*_HOME` / `*_VERSION`
+  // convention. If the user sets LLVM_HOME (a dir containing bin/), or
+  // LLVM_PATH (already the bin dir), or LLVM_VERSION with a base, honor it.
+  // This is what makes detection "automatic": no hardcoded machine path.
+  const home = process.env.LLVM_HOME;
+  if (home) {
+    paths.push(join(home, "bin"));
+  }
+  const pathDir = process.env.LLVM_PATH;
+  if (pathDir) {
+    paths.push(pathDir);
+  }
+  // EXTDEV-style root: LLVM_ROOT/<arch>/bin and LLVM_ROOT/bin (AUTOEXEC adds a
+  // `<arch>` component for arch-qualified EXTDEV installs, e.g. MinGW).
+  const root = process.env.LLVM_ROOT;
+  if (root) {
+    paths.push(join(root, arch, "bin"));
+    paths.push(join(root, "bin"));
+  }
+
   if (os === "darwin") {
     // Try the arch-default prefix first (correct for standard homebrew
     // installs — /opt/homebrew on Apple Silicon, /usr/local on Intel).
@@ -299,8 +328,22 @@ function llvmSearchPaths(os: OS, arch: Arch): string[] {
   }
 
   if (os === "windows") {
-    // Prefer standalone LLVM over VS-bundled
-    paths.push("C:\\Program Files\\LLVM\\bin");
+    // Prefer standalone LLVM over VS-bundled. Resolve %ProgramFiles% / the
+    // x86 path from env (AUTOEXEC sets them), not a hardcoded drive letter.
+    const pf = process.env["ProgramFiles"];
+    const pfx86 = process.env["ProgramFiles(x86)"];
+    for (const base of [pf, pfx86]) {
+      if (base) paths.push(join(base, "LLVM", "bin"));
+    }
+    // LLVM observed with a version suffix (e.g. C:\Program Files\LLVM-19\bin),
+    // and EXTDEV-rooted installs (EXTDEV/LLVM[_ver]/<arch>/bin).
+    const extdev = process.env.EXTDEV ?? process.env.LLVM_ROOT;
+    if (extdev) {
+      for (const n of [process.env.LLVM_VERSION ? `LLVM-${process.env.LLVM_VERSION}` : "LLVM", "LLVM"]) {
+        paths.push(join(extdev, n, arch, "bin"));
+        paths.push(join(extdev, n, "bin"));
+      }
+    }
   }
 
   if (os === "linux" || os === "darwin") {
@@ -605,6 +648,32 @@ export function findSystemTool(name: string, opts?: { required?: boolean; hint?:
   };
   if (opts?.hint !== undefined) spec.hint = opts.hint;
   return findTool(spec)?.path;
+}
+
+/**
+ * Find perl for the LUT codegen (create-hash-table.ts). Honors the AUTOEXEC
+ * convention before falling back to PATH:
+ *
+ *   1. %PERL5_HOME% / %PERL_HOME% — its bin dir (PERL5_HOME points at the
+ *      EXTDEV Perl install, which keeps bin/ + Site/bin/ like AUTOEXEC).
+ *   2. %EXTDEV%\Perl%PERL5_VERSION% — version-tagged EXTDEV install.
+ *   3. PATH.
+ *
+ * Returns the perl executable path, or undefined when not found.
+ */
+export function findPerl(): string | undefined {
+  const home = process.env.PERL5_HOME ?? process.env.PERL_HOME;
+  const paths: string[] = [];
+  if (home) paths.push(join(home, "bin"));
+
+  const extdev = process.env.EXTDEV;
+  if (extdev) {
+    const ver = process.env.PERL5_VERSION;
+    if (ver) paths.push(join(extdev, `Perl${ver}`, "bin"));
+    paths.push(join(extdev, "Perl", "bin"));
+  }
+
+  return findTool({ names: ["perl"], paths, required: false })?.path;
 }
 
 // ───────────────────────────────────────────────────────────────────────────

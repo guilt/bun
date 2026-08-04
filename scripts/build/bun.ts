@@ -29,7 +29,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "
 import { dirname, relative, resolve, sep } from "node:path";
 import type { Sources } from "../glob-sources.ts";
 import { emitCodegen, type CodegenOutputs } from "./codegen.ts";
-import { ar, cc, cxx, link, pch } from "./compile.ts";
+import { ar, cc, cxx, link, nasm, pch } from "./compile.ts";
 import { bunExeName, shouldStrip, type Config } from "./config.ts";
 import { generateDepVersionsHeader } from "./depVersionsHeader.ts";
 import { allDeps } from "./deps/index.ts";
@@ -103,7 +103,10 @@ function systemLibs(cfg: Config): string[] {
     // explicit is portable.
     libs.push(
       "winmm.lib",
-      "bcrypt.lib",
+      // bcrypt.lib pulls in bcryptprimitives.dll (Windows 8+ API set).
+      // On XP/Win9x: libuv loads ProcessPrng dynamically; no other code
+      // uses the bcrypt API directly, so skip it to avoid the static import.
+      ...(cfg.x86 ? [] : ["bcrypt.lib"]),
       "ntdll.lib",
       "userenv.lib",
       "dbghelp.lib",
@@ -299,6 +302,8 @@ export function emitBun(n: Ninja, cfg: Config, sources: Sources): BunOutput {
   const split = generateUnifiedSources(cfg, sources.cxx);
   const cxxSources = [...split.unified, ...split.standalone];
   const cSources = [...sources.c];
+  // Win9x x86: NASM objects defining __imp_ data symbols (see cfg.x86 block).
+  const asmObjects: string[] = [];
 
   // Sources that must NOT use the PCH. Anything that needs to set defines
   // before <Windows.h> (UNICODE, WIN32_LEAN_AND_MEAN opt-outs, etc.) goes
@@ -323,6 +328,49 @@ export function emitBun(n: Ninja, cfg: Config, sources: Sources): BunOutput {
     cxxSources.push(rescle, rescleBinding);
     noPchSources.add(rescle);
     noPchSources.add(rescleBinding);
+  }
+
+  // V8 shim sources are already globbed via the unified source system.
+  // Ensure they don't use PCH (they include v8 headers that may conflict
+  // with the root-pch.h defines).
+  if (cfg.x86) {
+    // Win9x API set stubs: compiled standalone (no PCH) so they can define
+    // symbols that conflict with synchapi.h declarations.
+    const apisetStubs = resolve(cfg.cwd, "src/jsc/bindings/win9x_apiset_stubs.cpp");
+    cxxSources.push(apisetStubs);
+    noPchSources.add(apisetStubs);
+
+    // WSAPoll → select() polyfill with delay-load hook for XP compat.
+    const wsapollStub = resolve(cfg.cwd, "src/jsc/bindings/wsapoll_stub.cpp");
+    cxxSources.push(wsapollStub);
+
+    // XP compat: stubs for all missing Vista+ APIs (SRWLock, ConditionVariable,
+    // etc.). The __imp_ data symbols in xp_win9x_imports.asm redirect the
+    // imports to these stubs. No PCH — includes Windows headers.
+    const xpCompat = resolve(cfg.cwd, "src/jsc/bindings/xp_compat.cpp");
+    cxxSources.push(xpCompat);
+    noPchSources.add(xpCompat);
+
+    // x86 win32 COFF: __imp__Foo@N data symbols that beat the import library
+    // (kernel32.lib/ws2_32.lib) so no XP-missing IAT entry is created. An
+    // object definition always wins over a library member; /alternatename
+    // cannot, because the import lib provides the symbol.
+    const xpImportsAsm = resolve(cfg.cwd, "src/jsc/bindings/xp_win9x_imports.asm");
+    asmObjects.push(nasm(n, cfg, xpImportsAsm, { flags: ["-f", "win32"] }));
+
+    const v8Dir = resolve(cfg.cwd, "src/jsc/bindings/v8");
+    const v8Files = [
+      "V8Array.cpp", "V8Boolean.cpp", "V8Context.cpp",
+      "V8EscapableHandleScope.cpp", "V8EscapableHandleScopeBase.cpp",
+      "V8External.cpp", "V8Function.cpp", "V8FunctionCallbackInfo.cpp",
+      "V8FunctionTemplate.cpp", "V8HandleScope.cpp", "V8Isolate.cpp",
+      "V8Local.cpp", "V8Maybe.cpp", "V8Number.cpp", "V8Object.cpp",
+      "V8ObjectTemplate.cpp", "V8String.cpp", "V8Template.cpp",
+      "V8Value.cpp", "node.cpp",
+    ];
+    for (const f of v8Files) {
+      noPchSources.add(resolve(v8Dir, f));
+    }
   }
 
   // Deps with provides.sources compiled in the loop below so each dep's
@@ -411,7 +459,7 @@ export function emitBun(n: Ninja, cfg: Config, sources: Sources): BunOutput {
   // Dep objects (when !cfg.archiveDeps) are linked alongside bun's own
   // objects — same response file, same archive in cpp-only mode. With
   // cfg.archiveDeps they live in depLibs as .a files instead.
-  const allObjects = [...cxxObjects, ...cObjects, ...depObjects];
+  const allObjects = [...cxxObjects, ...asmObjects, ...cObjects, ...depObjects];
 
   // ─── Step 7: cpp-only → archive and return ───
   // CI's build-cpp step: archive all .o into libbun.a, stop. The sibling

@@ -183,6 +183,22 @@ export const zlib: Dependency = {
       else defines.HAVE_CPUID_GNU = true;
       sources.push(...x64Generic().map(s => `arch/generic/${s}.c`));
       sources.push({ path: "arch/x86/x86_features.c", cflags: ["-mxsave"] });
+    } else if (cfg.x86) {
+      // i586/Pentium 4: SSE2 is available, skip SSSE3+ (no SSSE3 on P4).
+      kernels = X86.filter(k => k.define === "X86_SSE2");
+      archDir = "x86";
+      defines.X86_FEATURES = true;
+      defines.X86_HAVE_XSAVE_INTRIN = true;
+      // On x86_64 the SSE2 kernels double as the baseline fallback, but on
+      // 32-bit x86 functable.c gates them behind cpuid and has no non-SSE2
+      // path — adler32 & co. stay NULL and init_functable() aborts. Pull in
+      // every generic C fallback (they're already compiled from GENERIC) so
+      // the non-SSE2/SSE2-missing entries resolve.
+      defines.WITH_ALL_FALLBACKS = true;
+      if (cfg.windows) defines.HAVE_CPUID_MS = true;
+      else defines.HAVE_CPUID_GNU = true;
+      sources.push(...GENERIC.map(s => `arch/generic/${s}.c`));
+      sources.push({ path: "arch/x86/x86_features.c", cflags: ["-mxsave"] });
     } else if (cfg.arm64) {
       kernels = ARM;
       archDir = "arm";

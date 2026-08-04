@@ -218,22 +218,41 @@ export async function downloadWithRetry(url: string, dest: string, logPrefix: st
  *   has `bun-webkit/` that the caller wants to keep for a rename step).
  */
 export async function extractTarGz(tarball: string, dest: string, stripComponents = 1): Promise<void> {
-  const args = ["-xzmf", tarball, "-C", dest];
-  if (stripComponents > 0) args.push(`--strip-components=${stripComponents}`);
+  const tryExtract = async (exclude: string[] = []): Promise<boolean> => {
+    const args = ["-xzmf", tarball, "-C", dest];
+    if (stripComponents > 0) args.push(`--strip-components=${stripComponents}`);
+    for (const pat of exclude) args.push(`--exclude=${pat}`);
 
-  const result = spawnSync(tarExe, args, {
-    stdio: ["ignore", "ignore", "pipe"],
-    encoding: "utf8",
-  });
-
-  if (result.error) {
-    throw new BuildError(`Failed to spawn tar`, {
-      hint: "Is `tar` in your PATH? (macOS/linux ship it; Windows 10+ ships bsdtar as tar.exe)",
-      cause: result.error,
+    const result = spawnSync(tarExe, args, {
+      stdio: ["ignore", "ignore", "pipe"],
+      encoding: "utf8",
     });
+
+    if (result.error) throw result.error;
+    return result.status === 0;
+  };
+
+  // First attempt: full extraction
+  let ok = await tryExtract();
+
+  // On Windows, retry excluding test dirs (symlinks fail with bsdtar).
+  if (!ok && process.platform === "win32") {
+    const stderr = spawnSync(tarExe, ["-tzf", tarball], { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" }).stdout || "";
+    // Find directories containing symlinks that failed (heuristic: subdirs
+    // of tests/ or any path with a slash after the first component).
+    const excludes: string[] = [];
+    if (stderr.includes("tests/")) excludes.push("tests/");
+    if (stderr.includes("test/")) excludes.push("test/");
+    if (stderr.includes("doc/")) excludes.push("doc/");
+    if (stderr.includes("example")) excludes.push("example*");
+
+    console.log(`tar failed; retrying with excludes: ${excludes.join(", ") || "none"}`);
+    ok = await tryExtract(excludes);
   }
-  if (result.status !== 0) {
-    throw new BuildError(`tar extraction failed (exit ${result.status}): ${result.stderr}`, { file: tarball });
+
+  if (!ok) {
+    const stderr = spawnSync(tarExe, ["-tzf", tarball], { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" }).stderr || "";
+    throw new BuildError(`tar extraction failed`, { file: tarball, hint: stderr });
   }
 
   const entries = await readdir(dest);

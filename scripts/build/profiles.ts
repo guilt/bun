@@ -126,6 +126,25 @@ export const profiles = {
     webkit: "prebuilt",
   },
 
+  /** Win9x i586 debug build — local WebKit with LLInt + C Loop (no JIT). */
+  "win9x-debug": {
+    buildType: "Debug",
+    os: "windows",
+    arch: "i586",
+    webkit: "local",
+    icu: "local",
+  },
+
+  /** Win9x i586 release build. */
+  "win9x-release": {
+    buildType: "Release",
+    os: "windows",
+    arch: "i586",
+    webkit: "local",
+    icu: "local",
+    lto: false,
+  },
+
   /** Release build for local testing. No LTO (that's CI-only). */
   release: {
     buildType: "Release",

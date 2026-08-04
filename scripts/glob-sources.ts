@@ -85,6 +85,11 @@ const patterns = {
   },
   /** all `*.cpp` compiled into bun (bindings, webcore, v8 shim, usockets) */
   cxx: {
+    exclude: [
+      "src/jsc/bindings/win9x_apiset_stubs.cpp",
+      "src/jsc/bindings/wsapoll_stub.cpp",
+      "src/jsc/bindings/xp_compat.cpp",
+    ],
     paths: [
       "src/io/*.cpp",
       "src/jsc/modules/*.cpp",

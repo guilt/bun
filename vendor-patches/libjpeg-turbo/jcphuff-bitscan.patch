@@ -1,0 +1,22 @@
+diff --git a/src/jcphuff.c b/src/jcphuff.c
+index 0fcdd3eb..dca9e5f4 100644
+--- a/src/jcphuff.c
++++ b/src/jcphuff.c
+@@ -33,7 +33,7 @@
+ 
+ #include <intrin.h>
+ #ifdef _MSC_VER
+-#ifdef HAVE_BITSCANFORWARD64
++#if defined(HAVE_BITSCANFORWARD64) && defined(_WIN64)
+ #pragma intrinsic(_BitScanForward64)
+ #endif
+ #ifdef HAVE_BITSCANFORWARD
+@@ -152,7 +152,7 @@ static int bitcount_msb(bitgen_state_t* x)
+   int result;
+   result = __builtin_ctzl(*x);
+   *x >>= result;
+-#elif defined(HAVE_BITSCANFORWARD64)
++#elif defined(HAVE_BITSCANFORWARD64) && defined(_WIN64)
+   unsigned long result;
+   _BitScanForward64(&result, *x);
+   *x >>= result;

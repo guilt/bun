@@ -42,9 +42,10 @@ export const boringssl: Dependency = {
   patches: ["patches/boringssl/require-memory-hooks.patch"],
 
   build: cfg => {
-    // win-x64 uses NASM-syntax .asm; everything else (including win-aarch64)
-    // uses gas .S that clang assembles.
-    const asm = cfg.windows && cfg.x64 ? NASM : ASM;
+    // win-x64 uses NASM-syntax .asm; win-aarch64 uses gas .S;
+    // i586 Windows has no usable asm (the .S files are ELF/Mach-O only),
+    // so pure C fallback with OPENSSL_NO_ASM.
+    const asm = cfg.windows && cfg.x64 ? NASM : cfg.windows && cfg.x86 ? [] : ASM;
 
     const spec: DirectBuild = {
       kind: "direct",
@@ -56,6 +57,7 @@ export const boringssl: Dependency = {
         // See `patches:` above. Off under ASAN so BoringSSL allocs stay on the
         // intercepted libc heap on Mach-O/COFF instead of routing to mimalloc.
         ...(!cfg.asan && { BORINGSSL_REQUIRE_MEMORY_HOOKS: true }),
+        ...(cfg.x86 && { OPENSSL_NO_ASM: true }),
         ...(cfg.windows && {
           _HAS_EXCEPTIONS: 0,
           WIN32_LEAN_AND_MEAN: true,

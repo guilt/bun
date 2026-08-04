@@ -19,7 +19,7 @@
  * re-extraction after a failed patch doesn't re-download.
  */
 
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { ar, cc, cxx, nasm } from "./compile.ts";
 import type { BuildType, Config } from "./config.ts";
@@ -164,6 +164,7 @@ export type BuildSpec =
   | NestedCmakeBuild
   | CargoBuild
   | DirectBuild
+  | ScriptBuild
   | {
       /** No build step — headers-only or prebuilt binaries. */
       kind: "none";
@@ -333,6 +334,22 @@ export interface PreBuildSpec {
    * configure, so configure waits on them and re-runs if they change.
    * Also the ninja outputs — if missing, preBuild runs.
    */
+  outputs: string[];
+}
+
+/**
+ * Run a script that produces the declared outputs, with no cmake/cargo
+ * involved. Used for deps whose build is a bespoke script (e.g. ICU's
+ * msbuild-based build-icu.ps1 — ICU has no CMake build). Emitted via the
+ * same `dep_prebuild` rule WebKit's cmake preBuild uses.
+ */
+export interface ScriptBuild {
+  kind: "script";
+  /** Command argv. First element is the executable. */
+  command: string[];
+  /** Working directory (absolute). */
+  cwd: string;
+  /** Output files (absolute). Ninja outputs — if missing, the script runs. */
   outputs: string[];
 }
 
@@ -549,6 +566,16 @@ export function registerDepRules(n: Ninja, cfg: Config): void {
     pool: "dep",
   });
 
+  // Patch local source: apply .patch files to a local/in-tree dep source dir.
+  // Uses git apply with --reverse --check to detect already-applied patches
+  // (applying to a clean checkout would fail), and writes a .patched stamp so
+  // ninja re-patches when patch files change.
+  n.rule("dep_patch_local", {
+    command: `${stream} ${cfg.jsRuntime} ${fetchCli} apply-local-patches $srcdir $patches`,
+    description: "patch $name (local)",
+    restat: true,
+  });
+
   // Configure: runs cmake in the dep source dir, outputs CMakeCache.txt.
   // The full cmake args are baked into $args per-build — flag changes
   // invalidate configure, which invalidates the .a outputs.
@@ -631,8 +658,19 @@ export function registerDepRules(n: Ninja, cfg: Config): void {
   // would add --target which breaks cross-compiles. cfg.hostCc (not cfg.cc):
   // when cross-compiling for windows, cc is clang-cl and defaults to a
   // *-windows-msvc triple — host tools must stay plain clang.
+  // DirectBuild host tool: compile+link in one clang invocation with NO
+  // cfg target/arch flags — the tool runs on the build host. cc()/link()
+  // would add --target which breaks cross-compiles. cfg.hostCc (not cfg.cc):
+  // when cross-compiling for windows, cc is clang-cl and defaults to a
+  // *-windows-msvc triple — host tools must stay plain clang.
+  // Clear LIB on Windows host when cross-compiling: the MSVC LIB env var may
+  // point to the target arch (e.g. x86) but host tools need the host arch's
+  // CRT (e.g. x64). With LIB unset, clang-cl auto-detects the correct paths.
+  const hostCcLibCmd = cfg.host.os === "windows" && cfg.host.arch !== cfg.arch
+    ? `cmd /c "set LIB=&& ${q(cfg.hostCc)} $flags -o $out $in"`
+    : `${q(cfg.hostCc)} $flags -o $out $in`;
   n.rule("dep_host_cc", {
-    command: `${q(cfg.hostCc)} $flags -o $out $in`,
+    command: hostCcLibCmd,
     description: "host-cc $out",
   });
 
@@ -791,8 +829,26 @@ export function resolveDep(
     }
     sourceStamp = stampFile ? resolve(stampDir, stampFile) : stampDir;
 
+    // Apply patches to local source if any.
+    if (patches.length > 0) {
+      const patchStamp = resolve(cfg.buildDir, "stamps", `${dep.name}.patched`);
+      n.build({
+        outputs: [patchStamp],
+        rule: "dep_patch_local",
+        inputs: [sourceStamp],
+        implicitInputs: patches.map(p => resolve(cfg.cwd, p)),
+        vars: {
+          name: dep.name,
+          srcdir: srcDir,
+          patches: patches.map(p => quote(resolve(cfg.cwd, p))).join(" "),
+        },
+      });
+      sourceStamp = patchStamp;
+    }
+
     const modeName = source.kind === "in-tree" ? "in-tree" : "local";
-    assert(existsSync(sourceStamp), `${modeName} dep "${dep.name}" source not found at ${stampDir}`, {
+    const sourceCheck = stampFile ? resolve(stampDir, stampFile) : stampDir;
+    assert(existsSync(sourceCheck), `${modeName} dep "${dep.name}" source not found at ${stampDir}`, {
       hint:
         source.kind === "in-tree"
           ? `Expected ${stampFile || "source"} at ${source.path}/ — check deps/${dep.name}.ts`
@@ -849,6 +905,23 @@ export function resolveDep(
     // that's the generated headers + source stamp, NOT the .o files (those
     // are link inputs, not include-order dependencies).
     outputs = result.headerOutputs;
+  } else if (buildSpec.kind === "script") {
+    // Bespoke script build (e.g. ICU's msbuild-based build-icu.ps1): run the
+    // command once; the declared outputs are the ninja outputs + libs.
+    const hostWin = cfg.host.os === "windows";
+    n.build({
+      outputs: buildSpec.outputs,
+      rule: "dep_prebuild",
+      inputs: [],
+      implicitInputs: [sourceStamp],
+      vars: {
+        name: dep.name,
+        cwd: buildSpec.cwd,
+        cmd: quoteArgs(buildSpec.command, hostWin),
+      },
+    });
+    libs = buildSpec.outputs;
+    outputs = buildSpec.outputs;
   } else {
     // No build step. Source stamp is the only output. For deps with
     // provides.sources (picohttpparser), emitBun adds a phony pointing at
@@ -932,6 +1005,11 @@ export function computeDepLibs(cfg: Config, dep: Dependency): string[] {
     return [resolve(targetDir, outSubdir, `${cfg.libPrefix}${buildSpec.libName}${cfg.libSuffix}`)];
   }
 
+  // script: the declared outputs are the produced libs (absolute paths).
+  if (buildSpec.kind === "script") {
+    return buildSpec.outputs;
+  }
+
   // direct: single lib<name>.a when archiveDeps; otherwise the dep's .o
   // files are folded into libbun.a in cpp-only and there's no separate
   // artifact for link-only to fetch.
@@ -962,7 +1040,22 @@ function emitFetch(
 ): string {
   const srcDir = depSourceDir(cfg, name);
   const refStamp = resolve(srcDir, ".ref");
-  const patchPaths = patches.map(p => resolve(cfg.cwd, p));
+
+  // Auto-discover vendor-patches/<name>/*.patch — these are local-only
+  // fixes applied on top of the declared patches. Sorted for stable
+  // identity hashing across runs.
+  const vendorPatchDir = resolve(cfg.cwd, "vendor-patches", name);
+  const vendorPatches: string[] = [];
+  if (existsSync(vendorPatchDir)) {
+    for (const f of readdirSync(vendorPatchDir).sort()) {
+      if (f.endsWith(".patch")) vendorPatches.push(resolve(vendorPatchDir, f));
+    }
+  }
+
+  const allPatchPaths = [
+    ...patches.map(p => resolve(cfg.cwd, p)),
+    ...vendorPatches,
+  ];
 
   // ─── Preemptive stale-source cleanup ───
   // If vendor/<dep>/ exists but .ref is missing OR doesn't match the
@@ -978,7 +1071,7 @@ function emitFetch(
   //
   // Only deletes when identity is demonstrably wrong — normal no-op
   // builds skip it (identity matches, nothing touched).
-  invalidateStaleSource(srcDir, refStamp, source.commit, patchPaths);
+  invalidateStaleSource(srcDir, refStamp, source.commit, allPatchPaths);
 
   n.build({
     outputs: [refStamp],
@@ -990,7 +1083,7 @@ function emitFetch(
     inputs: [],
     // fetch-cli.ts (which has fetchDep) + patch files. Not this file —
     // it's configure-time ninja emission, not fetch logic.
-    implicitInputs: [fetchCliPath, ...patchPaths],
+    implicitInputs: [fetchCliPath, ...allPatchPaths],
     vars: {
       name,
       repo: source.repo,
@@ -999,7 +1092,7 @@ function emitFetch(
       cache: resolve(cfg.cacheDir, "tarballs"),
       // Pass patches space-separated. Shell-safe because patch paths are
       // under our control (no spaces in repo paths per convention).
-      patches: patchPaths.join(" "),
+      patches: allPatchPaths.join(" "),
     },
   });
 

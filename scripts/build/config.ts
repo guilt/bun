@@ -18,11 +18,12 @@ import { clangTargetArch } from "./tools.ts";
 import { cyan, dim, green } from "./tty.ts";
 
 export type OS = "linux" | "darwin" | "windows" | "freebsd";
-export type Arch = "x64" | "aarch64";
+export type Arch = "x64" | "aarch64" | "i586";
 export type Abi = "gnu" | "musl" | "android";
 export type BuildType = "Debug" | "Release" | "RelWithDebInfo" | "MinSizeRel";
 export type BuildMode = "full" | "cpp-only" | "rust-only" | "link-only" | "rust-and-link";
 export type WebKitMode = "prebuilt" | "local";
+export type IcuMode = "prebuilt" | "local";
 
 /**
  * Host platform — what's running the build. Distinguish from target
@@ -88,6 +89,7 @@ export interface Config {
   kqueue: boolean;
   x64: boolean;
   arm64: boolean;
+  x86: boolean;
 
   /**
    * What's running the build. Differs from os/arch/windows (target) in
@@ -173,8 +175,17 @@ export interface Config {
   ci: boolean;
   buildkite: boolean;
 
+  /**
+   * Embed the bundled built-in JS (node:fs, node:zlib, ...) into the binary as
+   * string constants instead of loading it from the build dir at runtime.
+   * Debug builds normally do the latter (BUN_DYNAMIC_JS_LOAD_PATH hot-reload);
+   * targets deployed away from the build dir (win9x/XP) must embed.
+   */
+  embeddedModules: boolean;
+
   // ─── Dependency modes ───
   webkit: WebKitMode;
+  icu: IcuMode;
 
   // ─── Paths (all absolute) ───
   /** Repository root. */
@@ -303,6 +314,14 @@ export interface Config {
    * undefined on native Windows builds (VS dev shell supplies the SDK).
    */
   winsysroot: string | undefined;
+  /**
+   * Windows x86 cross-compile (native only): extra `/libpath:` directories
+   * pointing at the x86 MSVC CRT and Windows SDK import libraries. The x64 VS
+   * dev shell sets %LIB% to x64 paths, so we must add x86 paths explicitly
+   * so lld-link resolves stdcall-decorated symbols from the correct .lib.
+   * Empty on non-x86 or cross-from-unix (which uses winsysroot instead).
+   */
+  windowsX86LibDirs: string[];
   /** Android NDK root. undefined when abi != "android". */
   androidNdk: string | undefined;
   /** Android API level (the N in `__ANDROID_API__=N`). undefined when abi != "android". */
@@ -355,7 +374,10 @@ export interface PartialConfig {
   timeTrace?: boolean;
   ci?: boolean;
   buildkite?: boolean;
+  /** Override embedded-module default (see Config.embeddedModules). */
+  embeddedModules?: boolean;
   webkit?: WebKitMode;
+  icu?: IcuMode;
   buildDir?: string;
   cacheDir?: string;
   /** Override NDK location (default: $ANDROID_NDK_ROOT etc). Only used when abi=android. */
@@ -735,6 +757,7 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
   const kqueue = darwin || freebsd;
   const x64 = arch === "x64";
   const arm64 = arch === "aarch64";
+  const x86 = arch === "i586";
   // Darwin target on a non-darwin host (Linux CI box building macOS
   // binaries). Same host-clang + --target/-isysroot model as Android/FreeBSD,
   // with ld64.lld doing the Mach-O link. See the cross block further down.
@@ -1085,8 +1108,15 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
         hint: "Drop --webkit=local or build on a Windows host.",
       });
     }
-    const llvmArch = arch === "x64" ? "x86_64" : "aarch64";
+    const llvmArch = arch === "x64" ? "x86_64" : arch === "i586" ? "i586" : "aarch64";
     crossTarget = `${llvmArch}-pc-windows-msvc`;
+  }
+
+  // ─── Native Windows x86 (Win9x) — set crossTarget for clang --target flag ───
+  // On a native Windows x64 host, clang-cl defaults to x86_64. For i586,
+  // we need --target=i586-pc-windows-msvc to get 32-bit codegen.
+  if (windows && host.os === "windows" && x86 && crossTarget === undefined) {
+    crossTarget = "i586-pc-windows-msvc";
   }
 
   // ─── Versioning ───
@@ -1178,6 +1208,7 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
     kqueue,
     x64,
     arm64,
+    x86,
     host,
     canRunOnHost: os === host.os && arch === host.arch && (!linux || abi === (detectLinuxAbi() ?? abi)),
     exeSuffix,
@@ -1209,7 +1240,9 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
     timeTrace: partial.timeTrace ?? false,
     ci,
     buildkite,
+    embeddedModules: partial.embeddedModules ?? (!debug || x86),
     webkit: partial.webkit ?? "prebuilt",
+    icu: partial.icu ?? "prebuilt",
     cwd,
     buildDir,
     codegenDir,
@@ -1265,6 +1298,7 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
     crossTarget,
     sysroot,
     winsysroot,
+    windowsX86LibDirs: windows && x86 ? windowsX86ImportLibPaths() : [],
     androidNdk,
     androidApiLevel,
     androidNdkRuntimeDir,
@@ -1564,4 +1598,25 @@ export function formatConfig(cfg: Config, exe: string): string {
  */
 export function formatConfigUnchanged(exe: string, elapsed: number): string {
   return `[configured] ${c.green(exe)} in ${elapsed}ms ${c.dim("(unchanged)")}`;
+}
+
+/**
+ * Returns the x86 MSVC CRT + Windows SDK import-library directories for
+ * native x86-targeted Windows links. Reads env vars set by the VS dev shell
+ * (vcvarsall.bat). Falls back to empty array when not on Windows or when the
+ * expected env vars are absent (the build will fail with "cannot open file
+ * 'kernel32.lib'" — the error is clear enough without crashing here).
+ */
+function windowsX86ImportLibPaths(): string[] {
+  const vcDir = process.env.VCToolsInstallDir;
+  const sdkDir = process.env.WindowsSdkDir;
+  const sdkVer = process.env.WindowsSDKLibVersion;
+  const dirs: string[] = [];
+
+  if (vcDir) dirs.push(`${vcDir}lib\\x86`);
+  if (sdkDir && sdkVer) {
+    dirs.push(`${sdkDir}lib\\${sdkVer}um\\x86`);
+    dirs.push(`${sdkDir}lib\\${sdkVer}ucrt\\x86`);
+  }
+  return dirs;
 }

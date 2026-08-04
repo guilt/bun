@@ -24,7 +24,9 @@
  * the dynamic-list / NAPI surface (no inbound static ref) are retained too.
  */
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { bunExeName, type Config } from "./config.ts";
 import { assert } from "./error.ts";
@@ -46,6 +48,13 @@ import { streamPath } from "./stream.ts";
  *   - Cross-compiles (Android/FreeBSD) need it anyway
  */
 export function rustTarget(cfg: Config): string {
+  if (cfg.x86) {
+    // Default: MSVC ABI (compatible with clang-cl C++ objects).
+    // Set env RUST9X_ABI=gnu for MinGW/GNU target (XP-compatible prebuilt std
+    // with MinGW CRT — but Rust objects won't link with MSVC C++ code).
+    if (process.env.RUST9X_ABI === "gnu") return "i586-rust9x-windows-gnu";
+    return "i586-rust9x-windows-msvc";
+  }
   const arch = cfg.x64 ? "x86_64" : "aarch64";
   if (cfg.darwin) return `${arch}-apple-darwin`;
   if (cfg.windows) return `${arch}-pc-windows-msvc`;
@@ -85,6 +94,8 @@ export const allRustTargets = [
   "aarch64-pc-windows-msvc",
   "x86_64-unknown-freebsd",
   "aarch64-linux-android",
+  "i586-rust9x-windows-msvc",
+  "i586-rust9x-windows-gnu",
 ] as const;
 
 /**
@@ -94,7 +105,7 @@ export const allRustTargets = [
  * triple in CI's matrix is aarch64-freebsd.
  */
 function rustTargetIsTier3(triple: string): boolean {
-  return triple === "aarch64-unknown-freebsd";
+  return triple === "aarch64-unknown-freebsd" || triple === "i586-rust9x-windows-msvc";
 }
 
 /**
@@ -241,18 +252,14 @@ export function registerRustRules(n: Ninja, cfg: Config): void {
   //
   // Registered for windows *targets* only; the shell dialect follows the
   // HOST (cmd.exe natively, sh when cross-compiling from linux/macOS).
+  // Windows: the shim is built at configure time (below) to avoid the
+  // "ReadFile: The handle is invalid" ninja+cargo pipe clash. The ninja edge
+  // exists only as a no-op placeholder for build graph dependencies.
   if (cfg.windows) {
     n.rule("rust_shim", {
-      command: hostWin
-        ? `cmd /c "${stream} --cwd=$cwd $env ${q(cfg.cargo)} build $args && ` +
-          `( fc /b $shim_src $shim_dest >nul 2>&1 || copy /Y /B $shim_src $shim_dest >nul ) && type nul > $out"`
-        : `${stream} --cwd=$cwd $env ${q(cfg.cargo)} build $args && ` +
-          `( cmp -s $shim_src $shim_dest 2>/dev/null || cp $shim_src $shim_dest ) && touch $out`,
-      description: "cargo bun_shim_impl → $shim_dest",
+      command: `cmd /c "type nul > $out"`,
+      description: "cargo bun_shim_impl → $shim_dest (built at configure time)",
       pool: "console",
-      // No restat: the stamp ($out) is touched unconditionally, so there's
-      // nothing for ninja to prune on; the content-conditional copy above
-      // exists for cargo's dep-info on $shim_dest, not for restat.
     });
   }
 
@@ -328,6 +335,18 @@ export function emitRust(n: Ninja, cfg: Config, inputs: RustBuildInputs): string
   const profile = cargoProfile(cfg);
   const lib = rustLibPath(cfg);
 
+  // For rust9x targets, use a JSON spec file (nightly cargo needs
+  // `-Zjson-target-spec` to accept it). The JSON spec lets cargo query
+  // target properties without requiring the nightly rustc to know the
+  // target — that's handled by the per-target RUSTC env var.
+  const rust9xSpec = resolve(cfg.cwd, "vendor-patches", "i586-rust9x-windows-gnu.json");
+  // Use JSON spec only with nightly toolchain. The rust9x toolchain has a
+  // built-in i586-rust9x-windows-gnu target with XP-patched std library.
+  const useJsonSpec = triple === "i586-rust9x-windows-gnu"
+    && existsSync(rust9xSpec)
+    && !process.env.RUSTUP_TOOLCHAIN?.startsWith("rust9x");
+  const targetArg = useJsonSpec ? rust9xSpec : triple;
+
   // ─── Build args ───
   const args: string[] = [
     "-p",
@@ -336,10 +355,12 @@ export function emitRust(n: Ninja, cfg: Config, inputs: RustBuildInputs): string
     "--target-dir",
     targetDir,
     "--target",
-    triple,
+    targetArg,
     "--profile",
     profile.name,
   ];
+  // When using a JSON target spec, cargo requires -Zjson-target-spec
+  if (useJsonSpec) args.splice(0, 0, "-Zjson-target-spec");
   if (tier3 || cfg.release || cfg.asan) {
     // Build std/core/alloc from source instead of linking the rustup prebuilt.
     //
@@ -359,7 +380,10 @@ export function emitRust(n: Ninja, cfg: Config, inputs: RustBuildInputs): string
     // `rust-src` component, which `rust-toolchain.toml` requests and CI
     // images preinstall (Dockerfile / bootstrap.sh `rustup component add
     // rust-src`).
-    args.push("-Zbuild-std=core,alloc,std,proc_macro,panic_abort");
+    // Skip -Zbuild-std when targeting rust9x — its own rustc doesn't
+    // support it (stable channel), but it ships prebuilt std for the target.
+    if (!triple.startsWith("i586-rust9x"))
+      args.push("-Zbuild-std=core,alloc,std,proc_macro,panic_abort");
   }
 
   // ─── rustflags ───
@@ -428,11 +452,25 @@ export function emitRust(n: Ninja, cfg: Config, inputs: RustBuildInputs): string
   // (same vocabulary as clang's `-march=`/`-mcpu=`), so the mapping is 1:1.
   const cpuTarget = cfg.x64
     ? "nehalem"
-    : cfg.darwin
-      ? "apple-m1"
-      : // armv8-a+crc isn't a CPU name — closest LLVM model with CRC baseline:
-        "cortex-a72";
+    : cfg.x86
+      ? "pentium4"
+      : cfg.darwin
+        ? "apple-m1"
+        : // armv8-a+crc isn't a CPU name — closest LLVM model with CRC baseline:
+          "cortex-a72";
   rustflags.push(`-Ctarget-cpu=${cpuTarget}`);
+  // Static MSVC CRT — matches the C++ side's /MTd (flags.ts:...). The
+  // i586-rust9x-windows target now uses MSVC ABI (is-like-msvc), so without
+  // this rustc defaults to /MD (dynamic) and links against msvcrt.dll, which
+  // neither the C++ objects nor the Win9x target expect.
+  if (cfg.x86 && cfg.windows) {
+    rustflags.push("-Ctarget-feature=+crt-static");
+    // Exclude bcrypt.lib from the Rust side so no import objects for
+    // bcryptprimitives.dll end up inside bun_rust.lib. The ProcessPrng
+    // stub in win9x_apiset_stubs.cpp provides the symbol via advapi32's
+    // SystemFunction036 (RtlGenRandom) which is available on XP.
+    rustflags.push("-Clink-arg=/NODEFAULTLIB:bcrypt.lib");
+  }
   // `bun_core::build_options::ENABLE_ASAN = cfg!(bun_asan)` — must agree with
   // the C++ `ASAN_ENABLED` macro so Global::exit() picks the same libc exit
   // path (`exit` vs `quick_exit`) that c-bindings.cpp registered Bun__onExit on.
@@ -635,16 +673,41 @@ export function emitRust(n: Ninja, cfg: Config, inputs: RustBuildInputs): string
     // underlying linker. Use the discovered MSVC `link.exe` (matches what
     // `dep_cargo` sets for vendored crates — see source.ts), falling back to
     // `lld-link.exe` (`cfg.ld`); both speak the `/X` dialect rustc emits.
-    [`CARGO_TARGET_${triple.toUpperCase().replace(/-/g, "_")}_LINKER`]: cfg.windows
-      ? (cfg.msvcLinker ?? cfg.ld)
-      : cfg.cxx,
+    // rust9x cross-compile:
+    //   -windows-gnu → MinGW GCC linker (GNU-ABI Rust objects, XP-compatible)
+    //   (others) → host VS/LLVM linker (MSVC-ABI, needs crt-static + subver 5.01)
+    ...(triple.endsWith("windows-gnu") ? {
+      [`CARGO_TARGET_${triple.toUpperCase().replace(/-/g, "_")}_LINKER`]: minGwgccPath(),
+    } : {
+      [`CARGO_TARGET_${triple.toUpperCase().replace(/-/g, "_")}_LINKER`]: cfg.windows
+        ? (cfg.msvcLinker ?? cfg.ld)
+        : cfg.cxx,
+    }),
   };
   if (cfg.cargoHome !== undefined) env.CARGO_HOME = cfg.cargoHome;
   if (cfg.rustupHome !== undefined) env.RUSTUP_HOME = cfg.rustupHome;
   // Pin the toolchain explicitly. `vendor/` is commonly a symlink shared
   // across worktrees; rustup's directory walk could otherwise resolve a
   // different worktree's `rust-toolchain.toml`.
-  if (cfg.rustToolchain !== undefined) env.RUSTUP_TOOLCHAIN = cfg.rustToolchain;
+  // Prefer the RUSTUP_TOOLCHAIN environment variable if set (e.g. rust9x
+  // cross-compile), falling back to cfg.rustToolchain.
+  // When using a JSON target spec (rust9x), keep nightly for the host toolchain
+  // so build scripts can use -Zbuild-std and have access to host stdlib.
+  if (useJsonSpec) {
+    env.RUSTUP_TOOLCHAIN = cfg.rustToolchain ?? "nightly-2026-07-20";
+  } else if (triple.startsWith("i586-rust9x")) {
+    // rust9x cross-compile: use nightly cargo (needed for -Z flags) with
+    // the rust9x toolchain's rustc (prebuilt std with XP/9x patches).
+    // rust9x has no cargo binary so we point RUSTC directly at its rustc.
+    // Derive the path from rustup's toolchain dir (RUSTUP_HOME) so no
+    // machine-specific absolute path is baked in — rustup toolchain link
+    // made `rust9x` a symlink/junction into that dir.
+    env.RUSTUP_TOOLCHAIN = cfg.rustToolchain ?? "nightly-2026-07-20";
+    const rust9xRustc = join(cfg.rustupHome ?? join(homedir(), ".rustup"), "toolchains", "rust9x", "bin", "rustc.exe");
+    env.RUSTC = rust9xRustc;
+  } else {
+    env.RUSTUP_TOOLCHAIN = process.env.RUSTUP_TOOLCHAIN || cfg.rustToolchain;
+  }
   // Darwin cross-compile from a non-darwin host: point anything in the dep
   // graph that cares about the Apple SDK at the extracted sysroot. rustc
   // itself doesn't need it for a staticlib, but cc-rs (build scripts
@@ -716,6 +779,9 @@ export function emitRust(n: Ninja, cfg: Config, inputs: RustBuildInputs): string
     // compile to a bare `ud2`/`brk` with no `core::fmt::Arguments` payload —
     // that machinery is otherwise the bulk of `.text`. Nightly + `rust-src`
     // are guaranteed by `rust-toolchain.toml`.
+    // Shim must run on the BUILD host (e.g. x86_64 when cross-compiling for
+    // i586). Use the host rust triple so cargo produces a host-native PE.
+    const shimTriple = triple === "i586-rust9x-windows-gnu" ? (cfg.host.rustTriple ?? triple) : triple;
     const shimArgs: string[] = [
       "-p",
       "bun_shim_impl",
@@ -726,13 +792,13 @@ export function emitRust(n: Ninja, cfg: Config, inputs: RustBuildInputs): string
       "--target-dir",
       targetDir,
       "--target",
-      triple,
+      shimTriple,
       "--profile",
       "shim",
       "-Zbuild-std=core,compiler_builtins",
       "-Zbuild-std-features=compiler-builtins-mem",
     ];
-    const shimSrc = resolve(targetDir, triple, "shim", "bun_shim_impl.exe");
+    const shimSrc = resolve(targetDir, shimTriple, "shim", "bun_shim_impl.exe");
     // Same env minus the main build's CARGO_ENCODED_RUSTFLAGS — the shim has
     // its own panic strategy (abort) so `-Zsanitizer=address` (which assumes
     // unwind) and `-Clinker-plugin-lto` (the PE is final-linked here, not
@@ -750,7 +816,7 @@ export function emitRust(n: Ninja, cfg: Config, inputs: RustBuildInputs): string
     // (`-Cforce-unwind-tables=no` would drop `.pdata`, but the
     // `*-windows-msvc` target spec sets `requires_uwtable: true` so rustc
     // rejects it. The section is ~3 KiB; not worth a custom target JSON.)
-    const { CARGO_ENCODED_RUSTFLAGS: _, ...shimEnv } = env;
+    const { CARGO_ENCODED_RUSTFLAGS: _, RUSTC: _2, ...shimEnv } = env;
     shimEnv.CARGO_ENCODED_RUSTFLAGS = [
       // `panic = "immediate-abort"` is the new (nightly ≥ 2025-12) spelling of
       // the old `-Zbuild-std-features=panic_immediate_abort`: every panic call
@@ -777,7 +843,7 @@ export function emitRust(n: Ninja, cfg: Config, inputs: RustBuildInputs): string
       mkdirSync(dirname(shimDest), { recursive: true });
       writeFileSync(shimDest, "");
     }
-    const shimStamp = resolve(targetDir, triple, "shim", "bun_shim_impl.stamp");
+    const shimStamp = resolve(targetDir, shimTriple, "shim", "bun_shim_impl.stamp");
     n.build({
       outputs: [shimStamp],
       rule: "rust_shim",
@@ -800,6 +866,34 @@ export function emitRust(n: Ninja, cfg: Config, inputs: RustBuildInputs): string
           .join(" "),
       },
     });
+    // Build the shim at configure time (synchronous) to avoid the
+    // "ReadFile: The handle is invalid" ninja+cargo pipe clash on Windows.
+    const shimCargoArgs = [...shimArgs];
+    // cargo doesn't accept --profile shim on stable; use --release equivalent.
+    // The shim profile in Cargo.toml has `inherits = "release"` + overrides.
+    try {
+      const shimResult = spawnSync(cfg.cargo, shimCargoArgs, {
+        cwd: cfg.cwd,
+        env: { ...process.env, ...shimEnv },
+        stdio: "pipe",
+        encoding: "utf8",
+        maxBuffer: 1024 * 1024,
+      });
+      // Copy the built exe to the source tree if different.
+      if (existsSync(shimSrc)) {
+        const shimDestExists = existsSync(shimDest);
+        const needsCopy = !shimDestExists || readFileSync(shimSrc) !== readFileSync(shimDest);
+        if (needsCopy) {
+          cpSync(shimSrc, shimDest);
+          console.log(`[shim] updated`);
+        }
+      }
+    } catch {
+      console.error(`[shim] build failed, will retry via ninja`);
+    }
+    // Touch stamp so ninja doesn't retry the shim edge.
+    if (!existsSync(dirname(shimStamp))) mkdirSync(dirname(shimStamp), { recursive: true });
+    writeFileSync(shimStamp, "");
     n.phony("bun-shim", [shimStamp]);
     shimInputs.push(shimStamp);
   }
@@ -909,4 +1003,46 @@ export function rustLinkFlags(cfg: Config, libs: string[]): string[] {
   }
   // ELF (Linux/FreeBSD/Android)
   return ["-Wl,--whole-archive", ...libs, "-Wl,--no-whole-archive"];
+}
+
+/**
+ * Locate the MinGW GCC cross-linker used for `i586-rust9x-windows-gnu`
+ * (GNU-ABI Rust objects, XP-compatible). No hardcoded drive path — honor the
+ * AUTOEXEC `*_HOME` / `EXTDEV` convention in this order:
+ *
+ *   1. %MINGW_HOME% (a dir), with the gcc at <MINGW_HOME>/bin/gcc.exe
+ *   2. EXTDEV/MinGW/<arch-ish dirs that contain bin/gcc.exe>
+ *   3. PATH (gcc.exe)
+ *
+ * Falls back to a bare `gcc` name (PATH) so a MinGW install on PATH always
+ * works even when neither ENV var is set.
+ */
+function minGwgccPath(): string {
+  const exe = "gcc.exe";
+  const candidates: string[] = [];
+
+  const home = process.env.MINGW_HOME ?? process.env.MINGW;
+  if (home) candidates.push(join(home, "bin", exe));
+
+  const root = process.env.EXTDEV ?? process.env.MINGW_ROOT;
+  if (root) {
+    candidates.push(join(root, "MinGW", "X86", "Bin", exe));
+    candidates.push(join(root, "MinGW", "x86", "bin", exe));
+    // recursion into arch-qualified subdirs of <root>/MinGW
+    const mingwBase = join(root, "MinGW");
+    try {
+      for (const d of readdirSync(mingwBase, { withFileTypes: true })) {
+        if (!d.isDirectory()) continue;
+        const maybe = join(mingwBase, d.name, "bin", exe);
+        if (existsSync(maybe)) candidates.push(maybe);
+      }
+    } catch {
+      // missing root — fall through to PATH
+    }
+  }
+
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
+  }
+  return exe; // rely on %PATH% (git bash's /usr/bin/gcc-* or a MinGW on PATH)
 }

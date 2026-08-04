@@ -24,7 +24,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, join, sep } from "node:path";
 import { downloadWithRetry, extractTarGz, fetchPrebuilt } from "./download.ts";
 import { BuildError, assert } from "./error.ts";
 import { writeIfChanged } from "./fs.ts";
@@ -73,6 +73,13 @@ async function main(): Promise<void> {
       // recompile after a no-op re-fetch.
       writeIfChanged(outPath, text);
       return;
+    }
+
+    case "apply-local-patches": {
+      // fetch-cli.ts apply-local-patches <srcdir> <patch> [<patch>...]
+      const [srcdir, ...patchPaths] = args;
+      assert(srcdir !== undefined, "apply-local-patches: missing srcdir");
+      return applyLocalPatches(srcdir, patchPaths);
     }
 
     case "prebuilt": {
@@ -186,15 +193,21 @@ async function fetchDep(
   // ─── Apply patches / overlays ───
   for (let i = 0; i < patches.length; i++) {
     const p = patches[i]!;
-    const name = basename(p);
+    const base = basename(p);
     if (p.endsWith(".patch")) {
-      console.log(`applying ${name}`);
+      console.log(`applying ${base}`);
       applyPatch(dest, p, patchContents[i]!);
     } else {
-      // Overlay file: copy into source root. Used for e.g. injecting a
-      // CMakeLists.txt into a project that doesn't have one (tinycc).
-      console.log(`overlay ${name}`);
-      await writeFile(join(dest, name), patchContents[i]!);
+      // Overlay file: copy into source tree, preserving relative path from
+      // patches/<depName>/.  For example, patches/libwebp/src/webp/config.h
+      // is written to dest/src/webp/config.h.
+      const needle = `${sep}patches${sep}${name}${sep}`;
+      const idx = p.indexOf(needle);
+      const rel = idx !== -1 ? p.slice(idx + needle.length) : base;
+      console.log(`overlay ${rel}`);
+      const out = join(dest, rel);
+      await mkdir(join(out, ".."), { recursive: true });
+      await writeFile(out, patchContents[i]!);
     }
   }
 
@@ -263,6 +276,34 @@ function applyPatch(dest: string, patchPath: string, patchBody: string): void {
       file: patchPath,
       hint: "The patch may be out of date with the pinned commit",
     });
+  }
+}
+
+/**
+ * Apply patches to a local source directory (e.g. vendor/WebKit/).
+ * Skips already-applied patches by running `git apply -R --check` first.
+ * Writes a `.patched` stamp file each time so ninja tracks freshness.
+ */
+function applyLocalPatches(srcdir: string, patchPaths: string[]): void {
+  for (const p of patchPaths) {
+    const body = readFileSync(p, "utf8");
+    const normalized = normalizeLf(body);
+
+    // Check if already applied (reverse apply check passes → applied).
+    const check = spawnSync("git", ["apply", "-R", "--check", "--ignore-whitespace", "--ignore-space-change", "-"], {
+      cwd: srcdir,
+      input: normalized,
+      stdio: ["pipe", "ignore", "pipe"],
+      encoding: "utf8",
+    });
+
+    if (check.status === 0) {
+      console.log(`  (already applied) ${basename(p)}`);
+      continue;
+    }
+
+    // Not applied — apply now.
+    applyPatch(srcdir, p, normalized);
   }
 }
 
