@@ -629,23 +629,7 @@ pub mod ntdll {
         ) -> NTSTATUS;
         pub fn NtClose(Handle: HANDLE) -> NTSTATUS;
 
-        // ── futex (`WaitOnAddress`) — used by `bun_threading::Futex` ──
-        // Linked from ntdll instead of `API-MS-Win-Core-Synch-l1-2-0.dll`
-        // because ntdll is autoloaded into every process; the Rtl* wrappers
-        // forward to the same kernel objects.
-        pub fn RtlWaitOnAddress(
-            Address: *const c_void,
-            CompareAddress: *const c_void,
-            AddressSize: usize,
-            Timeout: *const LARGE_INTEGER,
-        ) -> NTSTATUS;
-        pub fn RtlWakeAddressSingle(Address: *const c_void);
-        pub fn RtlWakeAddressAll(Address: *const c_void);
-
-        /// `RtlExitUserProcess` (ntdll). The Win32 `ExitProcess` forwards to
-        /// this; the freestanding `bun_shim_impl` calls it directly to avoid
-        /// linking kernel32 in the standalone PE.
-        pub fn RtlExitUserProcess(ExitStatus: u32) -> !;
+        // futex stubs — now provided by win9x_apiset_stubs.cpp
 
         /// `NtQueryInformationProcess` (`winternl.h`). With
         /// `ProcessBasicInformation` (0), fills a [`PROCESS_BASIC_INFORMATION`].
@@ -681,8 +665,28 @@ pub mod ntdll {
         ) -> NTSTATUS;
     }
     pub use super::RtlNtStatusToDosError;
+    // Stubbed ntdll functions — provided by win9x_apiset_stubs.cpp on XP.
+    // Declared without #[link] so linker resolves from .obj not ntdll.lib.
+    pub use super::RtlWaitOnAddress;
+    pub use super::RtlWakeAddressSingle;
+    pub use super::RtlWakeAddressAll;
+    pub use super::RtlExitUserProcess;
 }
 pub use ntdll::NtClose;
+
+// Stubbed ntdll funcs — implemented in win9x_apiset_stubs.cpp (XP compat).
+// Declared without #[link] so linker resolves from our .obj not ntdll.lib.
+unsafe extern "system" {
+    pub fn RtlWaitOnAddress(
+        Address: *const c_void,
+        CompareAddress: *const c_void,
+        AddressSize: usize,
+        Timeout: *const LARGE_INTEGER,
+    ) -> NTSTATUS;
+    pub fn RtlWakeAddressSingle(Address: *const c_void);
+    pub fn RtlWakeAddressAll(Address: *const c_void);
+    pub fn RtlExitUserProcess(ExitStatus: u32) -> !;
+}
 
 /// `user32` namespace (subset placeholder; fill in as needed).
 pub mod user32 {}
@@ -987,6 +991,8 @@ pub mod ws2_32 {
         pub fn freeaddrinfo(ai: *mut addrinfo);
         /// `WSAStartup` (`winsock2.h`). 0 on success; non-zero is a `WSAE*`.
         pub fn WSAStartup(wVersionRequested: u16, lpWSAData: *mut WSADATA) -> c_int;
+        pub fn WSACleanup() -> c_int;
+        pub fn gethostname(name: *mut i8, namelen: c_int) -> c_int;
     }
 
     /// `WSADATA` (`winsock2.h`, **`_WIN64` layout** — on 64-bit Windows
@@ -1005,7 +1011,11 @@ pub mod ws2_32 {
         pub szDescription: [u8; 257],
         pub szSystemStatus: [u8; 129],
     }
-    const _: () = assert!(core::mem::size_of::<WSADATA>() == 408);
+    const _: () = if cfg!(target_pointer_width = "64") {
+        assert!(core::mem::size_of::<WSADATA>() == 408);
+    } else {
+        assert!(core::mem::size_of::<WSADATA>() == 400);
+    };
 
     /// `SOCKADDR_STORAGE` (`ws2def.h`). 128 bytes, 8-aligned.
     #[repr(C)]
@@ -1176,9 +1186,9 @@ pub mod ws2_32 {
         pub fn closesocket(s: usize) -> c_int;
         pub fn recv(s: usize, buf: *mut c_void, len: c_int, flags: c_int) -> c_int;
         pub fn send(s: usize, buf: *const c_void, len: c_int, flags: c_int) -> c_int;
-        /// `WSAPoll` (`winsock2.h`). Returns count of ready fds, 0 on timeout,
-        /// or `SOCKET_ERROR` (-1) on failure (`WSAGetLastError` for the code).
-        pub fn WSAPoll(fdArray: *mut WSAPOLLFD, fds: u32, timeout: c_int) -> c_int;
+        // NOTE: WSAPoll is intentionally omitted — XP's ws2_32.dll doesn't
+        // export it (Vista+). Callers use the select()-based polyfill
+        // `bun_wsapoll_stub` (see bun_core::util::is_writable).
     }
 
     /// `WSAPOLLFD` (`winsock2.h`). `fd` is a `SOCKET` (= `UINT_PTR`).
@@ -1478,6 +1488,8 @@ unsafe extern "system" {
         TokenInformationLength: DWORD,
         ReturnLength: *mut DWORD,
     ) -> BOOL;
+
+    pub fn GetUserNameW(lpBuffer: LPWSTR, pcbBuffer: LPDWORD) -> BOOL;
 }
 
 // `GetProcAddress`/`LoadLibraryA` are kernel32 stdcall — use `extern "system"` so the
@@ -1502,8 +1514,6 @@ unsafe extern "system" {
         fileInformation: LPVOID,
         bufferSize: DWORD,
     ) -> BOOL;
-
-    pub fn GetHostNameW(lpBuffer: PWSTR, nSize: c_int) -> BOOL;
 
     pub fn SetEnvironmentVariableW(lpName: LPCWSTR, lpValue: LPCWSTR) -> BOOL;
 
@@ -1538,10 +1548,6 @@ unsafe extern "system" {
     ) -> HANDLE;
 
     pub fn OpenProcess(dwDesiredAccess: DWORD, bInheritHandle: BOOL, dwProcessId: DWORD) -> HANDLE;
-}
-
-unsafe extern "C" {
-    pub fn GetUserNameW(lpBuffer: LPWSTR, pcbBuffer: LPDWORD) -> BOOL;
 }
 
 // ── Job Object structures (`winnt.h`) ─────────────────────────────────────
@@ -1774,6 +1780,14 @@ pub fn teb() -> *mut TEB {
         core::arch::asm!("mov {}, gs:[0x30]", out(reg) p, options(nostack, pure, readonly));
         p
     }
+    #[cfg(target_arch = "x86")]
+    // SAFETY: on Windows x86 `fs:[0x18]` is the OS-maintained TEB self-
+    // pointer; reading it has no side effects and is always valid.
+    unsafe {
+        let p: *mut TEB;
+        core::arch::asm!("mov {}, fs:[0x18]", out(reg) p, options(nostack, pure, readonly));
+        p
+    }
     #[cfg(target_arch = "aarch64")]
     // SAFETY: on Windows ARM64 `x18` is the reserved OS thread-block
     // pointer; reading it has no side effects and is always valid.
@@ -1798,6 +1812,13 @@ pub fn peb() -> *const PEB {
     unsafe {
         let p: *const PEB;
         core::arch::asm!("mov {}, gs:[0x60]", out(reg) p, options(nostack, pure, readonly));
+        p
+    }
+    #[cfg(target_arch = "x86")]
+    // SAFETY: on Windows x86 `fs:[0x30]` is the PEB pointer inside the TEB.
+    unsafe {
+        let p: *const PEB;
+        core::arch::asm!("mov {}, fs:[0x30]", out(reg) p, options(nostack, pure, readonly));
         p
     }
     #[cfg(target_arch = "aarch64")]
@@ -1845,7 +1866,8 @@ unsafe extern "system" {
     ) -> HRESULT;
 }
 
-unsafe extern "C" {
+#[link(name = "kernel32")]
+unsafe extern "system" {
     pub fn SetStdHandle(nStdHandle: u32, hHandle: *mut c_void) -> u32;
 
     /// No preconditions.
@@ -1853,10 +1875,7 @@ unsafe extern "C" {
 
     /// No preconditions.
     pub safe fn GetConsoleCP() -> u32;
-}
 
-#[link(name = "kernel32")]
-unsafe extern "system" {
     /// No preconditions; returns 0 on failure.
     pub safe fn SetConsoleCP(wCodePageID: UINT) -> BOOL;
 

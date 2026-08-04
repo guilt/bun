@@ -207,7 +207,7 @@ symbol_flag_accessors! {
     has_been_assigned_to, set_has_been_assigned_to => HAS_BEEN_ASSIGNED_TO;
 }
 
-const _: () = assert!(core::mem::size_of::<Option<bun_alloc::AstBox<G::NamespaceAlias>>>() == 8);
+const _: () = assert!(core::mem::size_of::<Option<bun_alloc::AstBox<G::NamespaceAlias>>>() == core::mem::size_of::<usize>());
 const _: () = assert!(core::mem::size_of::<Symbol>() <= 48);
 
 const INVALID_CHUNK_INDEX: u32 = u32::MAX;
@@ -770,3 +770,4 @@ impl Symbol {
         kind.is_private()
     }
 }
+

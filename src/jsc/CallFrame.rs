@@ -192,8 +192,14 @@ impl CallFrame {
     }
 }
 
-// These constants are from JSC::CallFrameSlot in JavaScriptCore/interpreter/CallFrame.h
-const OFFSET_CODE_BLOCK: usize = 2;
+// These constants are from JSC::CallFrameSlot in JavaScriptCore/interpreter/CallFrame.h.
+// CallerFrameAndPC is two pointer-sized slots ({callerFrame, returnPC}); on 64-bit a
+// Register is one pointer so that's 2 registers, but on 32-bit JSVALUE32_64 a Register is
+// 8 bytes while a pointer is 4, so CallerFrameAndPC::sizeInRegisters is only 1 and every
+// subsequent slot shifts down by one. Compute it like JSC does.
+const REGISTERS_FOR_CALLER_FRAME_AND_PC: usize =
+    (2 * core::mem::size_of::<*const ()>()) / core::mem::size_of::<JSValue>();
+const OFFSET_CODE_BLOCK: usize = REGISTERS_FOR_CALLER_FRAME_AND_PC;
 const OFFSET_CALLEE: usize = OFFSET_CODE_BLOCK + 1;
 const OFFSET_ARGUMENT_COUNT_INCLUDING_THIS: usize = OFFSET_CALLEE + 1;
 const OFFSET_THIS_ARGUMENT: usize = OFFSET_ARGUMENT_COUNT_INCLUDING_THIS + 1;

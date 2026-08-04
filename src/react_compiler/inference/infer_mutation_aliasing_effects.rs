@@ -291,6 +291,7 @@ struct ValueIdSet {
 }
 
 const _: () = assert!(std::mem::size_of::<ValueIdSet>() == 16);
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<usize>() == 8);
 
 impl ValueIdSet {

@@ -2791,6 +2791,12 @@ pub fn is_writable(fd: Fd) -> Pollable {
     // bun_core can't depend on
     // bun_sys (tier inversion), so go to bun_windows_sys::ws2_32 directly.
     use bun_windows_sys::ws2_32;
+    // XP's ws2_32.dll lacks WSAPoll, so call the select()-based polyfill
+    // (src/jsc/bindings/wsapoll_stub.cpp) instead of importing WSAPoll.
+    // Signature matches WSAPoll; fd is UINT_PTR.
+    unsafe extern "system" {
+        fn bun_wsapoll_stub(fdArray: *mut ws2_32::WSAPOLLFD, fds: u32, timeout: i32) -> i32;
+    }
     let mut polls = [ws2_32::WSAPOLLFD {
         // HANDLE → SOCKET pointer reinterpretation.
         fd: fd.native() as usize,
@@ -2798,7 +2804,7 @@ pub fn is_writable(fd: Fd) -> Pollable {
         revents: 0,
     }];
     // SAFETY: polls is a valid 1-element WSAPOLLFD array; len=1 matches the buffer.
-    let rc = unsafe { ws2_32::WSAPoll(polls.as_mut_ptr(), 1, 0) };
+    let rc = unsafe { bun_wsapoll_stub(polls.as_mut_ptr(), 1, 0) };
     let result = rc != ws2_32::SOCKET_ERROR && rc != 0;
     crate::scoped_log!(
         SYS,

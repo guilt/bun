@@ -243,7 +243,7 @@ pub mod semver_string {
         /// 1. Empty string. If it's all zeroes, then it's an empty string.
         /// 2. If the final bit is not set, then it's a string that is stored inline.
         /// 3. If the final bit is set, then it's a string that is stored in an external buffer.
-        pub bytes: [u8; String::MAX_INLINE_LEN],
+        pub bytes: [u8; 8],
     }
 
     impl fmt::Debug for String {
@@ -263,9 +263,15 @@ pub mod semver_string {
     // Pointers are truncated to 63 bits via this mask.
     const MAX_ADDRESSABLE_SPACE_MASK: u64 = (1u64 << 63) - 1;
 
+    #[cfg(target_pointer_width = "64")]
     const _: () = assert!(
         core::mem::size_of::<usize>() == 8,
         "This code needs to be updated for non-64-bit architectures",
+    );
+    #[cfg(target_pointer_width = "32")]
+    const _: () = assert!(
+        core::mem::size_of::<usize>() == 4,
+        "This code needs to be updated for non-32-bit architectures",
     );
 
     impl String {

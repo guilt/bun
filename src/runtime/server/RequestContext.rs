@@ -125,6 +125,7 @@ pub type RequestContextStackAllocator<
     REQUEST_CONTEXT_POOL_CAPACITY,
 >;
 
+#[repr(C, align(8))]
 pub struct RequestContext<
     ThisServer,
     const SSL_ENABLED: bool,

@@ -898,11 +898,30 @@ pub enum Tag {
 
 // `ZigString` pointer-tag scheme — single source of truth.
 // Flag bits live in the POINTER's high byte; untagging truncates to 53 bits.
-pub const ZS_STATIC_BIT: usize = 1usize << 60;
-pub const ZS_UTF8_BIT: usize = 1usize << 61;
-pub const ZS_GLOBAL_BIT: usize = 1usize << 62;
-pub const ZS_16BIT_BIT: usize = 1usize << 63;
-pub const ZS_UNTAG_MASK: usize = (1usize << 53) - 1;
+// On 32-bit targets, the pointer is only 32 bits wide, so we use lower shifts.
+#[cfg(target_pointer_width = "64")]
+mod zs_tags {
+    pub const ZS_STATIC_BIT: usize = 1 << 60;
+    pub const ZS_UTF8_BIT: usize = 1 << 61;
+    pub const ZS_GLOBAL_BIT: usize = 1 << 62;
+    pub const ZS_16BIT_BIT: usize = 1 << 63;
+    pub const ZS_UNTAG_MASK: usize = (1 << 53) - 1;
+}
+#[cfg(target_pointer_width = "32")]
+mod zs_tags {
+    // The STATIC pointer-tag is UNUSED on 32-bit: static strings use the
+    // BunString tag byte (BunStringTag::StaticZigString), and no code calls
+    // mark_static/is_static on a ZigString pointer. Bit 28 is therefore a real
+    // address bit (the win9x process's JS string buffers sit at ~330 MB, above
+    // the old 268 MB limit). Tags live in bits 29-31 → 512 MB addressable.
+    pub const ZS_STATIC_BIT: usize = 0;
+    pub const ZS_UTF8_BIT: usize = 1 << 29;
+    pub const ZS_GLOBAL_BIT: usize = 1 << 30;
+    pub const ZS_16BIT_BIT: usize = 1 << 31;
+    // Keep the low 29 bits (clearing the 29-31 tag bits); bit 28 stays address.
+    pub const ZS_UNTAG_MASK: usize = (1 << 29) - 1;
+}
+pub use zs_tags::*;
 
 /// FFI string slice — `{ ptr: *const u8, len: usize }`.
 ///

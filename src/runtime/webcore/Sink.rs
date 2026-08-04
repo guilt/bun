@@ -659,7 +659,7 @@ impl<T: JsSinkAbi> JSSink<T> {
         signal.clear();
         // SAFETY: `signal.ptr` was stored by `SinkSignal::<T>::init` as the
         // encoded JSValue bits (never a real Rust pointer); bitcast back.
-        let value = JSValue::from_encoded(ptr.as_ptr() as usize);
+        let value = JSValue::from_encoded(ptr.as_ptr() as u64);
         value.unprotect();
         // `${abi}__detachPtr` runs the JS `onClose` callback through the bare
         // `AsyncContextFrame::call` overload (no TopExceptionScope of its own)
@@ -688,7 +688,7 @@ impl<T: JsSinkAbi> SinkSignal<T> {
         // a raw bit-pattern.
         fn close<T: JsSinkAbi>(this: *mut c_void, _err: Option<SysError>) {
             // `this` is the JSValue bits stashed by `init`; bitcast back.
-            let cpp = JSValue::from_encoded(this as usize);
+            let cpp = JSValue::from_encoded(this as u64);
             // `call_check_slow` satisfies the C++ ThrowScope's
             // `simulateThrow()`.
             // TODO: this should be got from a parameter / properly propagate exception upwards.
@@ -701,7 +701,7 @@ impl<T: JsSinkAbi> SinkSignal<T> {
             _a: Option<crate::webcore::BlobSizeType>,
             _o: Option<crate::webcore::BlobSizeType>,
         ) {
-            let cpp = JSValue::from_encoded(this as usize);
+            let cpp = JSValue::from_encoded(this as u64);
             // `${abi}__onReady` calls m_onPull through the bare
             // `AsyncContextFrame::call` overload (no TopExceptionScope of its
             // own); see `close` above. Same wrapper.
@@ -1048,7 +1048,7 @@ impl<T: JsSinkType + JsSinkAbi> JSSink<T> {
     /// newer controller's bits.
     pub fn js_controller_detached(this: &mut T, controller: crate::webcore::jsc::JSValue) {
         if let Some(signal) = this.signal() {
-            if signal.ptr.map(|p| p.as_ptr() as usize) == Some(controller.encoded()) {
+            if signal.ptr.map(|p| p.as_ptr() as u64) == Some(controller.encoded()) {
                 signal.clear();
             }
         }

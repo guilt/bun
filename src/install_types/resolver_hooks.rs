@@ -959,11 +959,15 @@ impl Architecture {
     pub const CURRENT: Self = Self(Self::ARM64);
     #[cfg(target_arch = "x86_64")]
     pub const CURRENT: Self = Self(Self::X64);
+    #[cfg(target_arch = "x86")]
+    pub const CURRENT: Self = Self(Self::IA32);
 
     #[cfg(target_arch = "aarch64")]
     pub const CURRENT_NAME: &'static str = "arm64";
     #[cfg(target_arch = "x86_64")]
     pub const CURRENT_NAME: &'static str = "x64";
+    #[cfg(target_arch = "x86")]
+    pub const CURRENT_NAME: &'static str = "ia32";
 
     #[inline]
     pub const fn none() -> Self {

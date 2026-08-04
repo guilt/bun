@@ -2346,6 +2346,10 @@ mod draft {
             {
                 b'W'
             }
+            #[cfg(all(windows, target_arch = "x86"))]
+            {
+                b'x'
+            }
             #[cfg(all(target_os = "freebsd", target_arch = "x86_64"))]
             {
                 b'f'

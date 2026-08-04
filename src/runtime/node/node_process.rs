@@ -134,7 +134,7 @@ mod _impl {
     use bun_sys as Syscall;
 
     #[cfg(windows)]
-    unsafe extern "C" {
+    unsafe extern "system" {
         // SAFETY precondition: `name` must point to a NUL-terminated wide string;
         // `value` must be either null (delete) or a NUL-terminated wide string.
         // Raw-pointer contract — cannot be `safe fn`.

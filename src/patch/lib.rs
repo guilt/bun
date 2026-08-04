@@ -298,7 +298,12 @@ fn apply_patch(patch: &FilePatch<'_>, patch_dir: Fd, state: &mut ApplyState) -> 
     // But if the file size is small, like less than a single page, it's probably ok
     // to use the arena
     let _use_arena: bool = stat.st_size as usize <= PAGE_SIZE;
-    let filebuf: Vec<u8> = match read_file_alloc(patch_dir, &file_path, 1024 * 1024 * 1024 * 4) {
+    let filebuf: Vec<u8> = match read_file_alloc(patch_dir, &file_path, {
+        #[cfg(target_pointer_width = "64")]
+        { 1024 * 1024 * 1024 * 4 }
+        #[cfg(target_pointer_width = "32")]
+        { usize::MAX }
+    }) {
         Ok(b) => b,
         Err(_) => {
             return sys::Result::Err(

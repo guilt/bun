@@ -44,7 +44,23 @@ bitflags::bitflags! {
     }
 }
 
-#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+#[cfg(target_arch = "x86")]
+bitflags::bitflags! {
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    pub struct Flags: u8 {
+        const NONE    = 1 << 0;
+        const SSE     = 1 << 1;
+        const SSE2    = 1 << 2;
+        const SSE3    = 1 << 3;
+        const SSSE3   = 1 << 4;
+        const SSE41   = 1 << 5;
+        const SSE42   = 1 << 6;
+        const POPCNT  = 1 << 7;
+    }
+}
+
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "x86")))]
 compile_error!("CPUFeatures: unsupported target architecture");
 
 // Per-arch const table of flag names, skipping "none" and padding bits.
@@ -55,6 +71,17 @@ const NAMED_FLAGS: &[(&str, Flags)] = &[
     ("avx", Flags::AVX),
     ("avx2", Flags::AVX2),
     ("avx512", Flags::AVX512),
+];
+
+#[cfg(target_arch = "x86")]
+const NAMED_FLAGS: &[(&str, Flags)] = &[
+    ("sse", Flags::SSE),
+    ("sse2", Flags::SSE2),
+    ("sse3", Flags::SSE3),
+    ("ssse3", Flags::SSSE3),
+    ("sse41", Flags::SSE41),
+    ("sse42", Flags::SSE42),
+    ("popcnt", Flags::POPCNT),
 ];
 
 #[cfg(target_arch = "aarch64")]

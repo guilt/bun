@@ -225,7 +225,7 @@ impl JSGlobalObject {
     pub fn to_js_value(&self) -> JSValue {
         // JSValue is #[repr(transparent)] over the encoded pointer-width word; a
         // cell pointer is encoded as its address.
-        JSValue::from_encoded(std::ptr::from_ref::<Self>(self) as usize)
+        JSValue::from_encoded(std::ptr::from_ref::<Self>(self) as u64)
     }
 
     pub fn throw_invalid_arguments(&self, args: Arguments<'_>) -> JsError {

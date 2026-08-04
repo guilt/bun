@@ -126,7 +126,7 @@ impl Crypto {
             bun_core::ffi::slice_mut(array.ptr(), array.len())
         });
         // Encode the cell pointer back into a JSValue.
-        JSValue::from_encoded(std::ptr::from_ref::<JSUint8Array>(array) as usize)
+        JSValue::from_encoded(std::ptr::from_ref::<JSUint8Array>(array) as u64)
     }
 
     #[bun_jsc::host_fn(method)]

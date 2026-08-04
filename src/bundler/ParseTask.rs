@@ -1658,18 +1658,21 @@ pub mod parse_worker {
     // These structs are passed by-pointer to **third-party** native plugins via
     // `packages/bun-native-bundler-plugin-api/bundler_plugin.h`, so layout drift
     // is a silent ABI break for every plugin in the wild. Literals are the 64-bit
-    // C layout from `bundler_plugin.h`.
+    // C layout from `bundler_plugin.h`. On 32-bit, sizes differ.
+    #[cfg(target_pointer_width = "64")]
     bun_core::assert_ffi_layout!(
         OnBeforeParseArguments, 64, 8;
         struct_size @ 0, context @ 8, path_ptr @ 16, path_len @ 24,
         namespace_ptr @ 32, namespace_len @ 40, default_loader @ 48, external @ 56,
     );
+    #[cfg(target_pointer_width = "64")]
     bun_core::assert_ffi_layout!(
         BunLogOptions, 80, 8;
         struct_size @ 0, message_ptr @ 8, message_len @ 16, path_ptr @ 24,
         path_len @ 32, source_line_text_ptr @ 40, source_line_text_len @ 48,
         level @ 56, line @ 60, line_end @ 64, column @ 68, column_end @ 72,
     );
+    #[cfg(target_pointer_width = "64")]
     bun_core::assert_ffi_layout!(
         OnBeforeParseResult, 64, 8;
         struct_size @ 0, source_ptr @ 8, source_len @ 16, loader @ 24,

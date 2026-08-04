@@ -31,9 +31,9 @@ pub use crate::flags as Flags;
 #[repr(C, packed(4))]
 pub struct StoreRef<T>(NonNull<T>);
 
-const _: () = assert!(core::mem::size_of::<StoreRef<u8>>() == 8);
+const _: () = assert!(core::mem::size_of::<StoreRef<u8>>() == core::mem::size_of::<usize>());
 const _: () = assert!(core::mem::align_of::<StoreRef<u8>>() == 4);
-const _: () = assert!(core::mem::size_of::<Option<StoreRef<u8>>>() == 8);
+const _: () = assert!(core::mem::size_of::<Option<StoreRef<u8>>>() == core::mem::size_of::<usize>());
 
 // SAFETY: `StoreRef` is a thin pointer into a single-threaded bump arena.
 // We assert Send/Sync so payload types embedding `Option<StoreRef<T>>`
@@ -172,7 +172,7 @@ pub struct StoreStr {
     len: u32,
 }
 
-const _: () = assert!(core::mem::size_of::<StoreStr>() == 12);
+const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<StoreStr>() == 12 || cfg!(target_pointer_width = "32"));
 const _: () = assert!(core::mem::align_of::<StoreStr>() == 4);
 
 // SAFETY: same rationale as `StoreRef` — points into a single-threaded bump
@@ -338,7 +338,7 @@ pub struct StoreSlice<T> {
     len: u32,
 }
 
-const _: () = assert!(core::mem::size_of::<StoreSlice<u8>>() == 12);
+const _: () = assert!(core::mem::size_of::<StoreSlice<u8>>() == core::mem::size_of::<NonNull<u8>>() + 4);
 const _: () = assert!(core::mem::align_of::<StoreSlice<u8>>() == 4);
 
 // Manual Copy/Clone: derive would add a spurious `T: Copy` bound.
@@ -575,7 +575,7 @@ pub struct LocRef {
     pub ref_: Ref,
 }
 
-const _: () = assert!(core::mem::size_of::<LocRef>() == 12);
+const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<LocRef>() == 12 || cfg!(target_pointer_width = "32"));
 
 impl Default for LocRef {
     fn default() -> Self {
@@ -1343,3 +1343,5 @@ pub mod math {
 // LIFETIMES.tsv: value slices point into the parser arena → `StoreStr`
 // (arena-owned, no `'bump` cascade).
 pub type MangledProps = ArrayHashMap<Ref, StoreStr>;
+
+

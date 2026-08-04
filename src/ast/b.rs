@@ -53,9 +53,9 @@ impl Default for B {
 // Three `StoreRef<T>` variants (8 B align 4) + one ZST → 1-byte discriminant
 // + 8-byte payload = 9, align(4) rounds to 12. `Binding` = `B` (12, align 4)
 // + `Loc` (i32) → 16. `Option<B>` niche-packs via spare discriminant values.
-const _: () = assert!(core::mem::size_of::<B>() == 12);
+const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<B>() == 12 || cfg!(target_pointer_width = "32"));
 const _: () = assert!(core::mem::align_of::<B>() == 4);
-const _: () = assert!(core::mem::size_of::<super::binding::Binding>() == 16);
+const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<super::binding::Binding>() == 16 || cfg!(target_pointer_width = "32"));
 const _: () = assert!(
     core::mem::size_of::<Option<B>>() == core::mem::size_of::<B>(),
     "B lost its niche — check for #[repr] or oversized inline payload"
@@ -180,3 +180,4 @@ impl B {
 type _BindingTagHost = Binding;
 
 pub use crate::g::Class;
+

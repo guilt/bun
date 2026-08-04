@@ -5,7 +5,11 @@ use bun_alloc::AllocError;
 // NOTE: the tag-bit scheme below only works on little-endian systems.
 const _: () = assert!(cfg!(target_endian = "little"));
 // NOTE: the packed layout assumes 64-bit pointers (`__ptr` occupies the upper 64 bits of the u128).
+// On 32-bit targets, `usize` is 4 bytes.
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(mem::size_of::<usize>() == 8);
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(mem::size_of::<usize>() == 4);
 
 /// This is a string type that stores up to 15 bytes inline on the stack, and heap allocates if it is longer.
 ///
@@ -29,7 +33,13 @@ impl Clone for SmolStr {
     }
 }
 
+#[cfg(target_pointer_width = "64")]
 const TAG: usize = 0x8000_0000_0000_0000; // bit 63 of the ptr word == bit 127 of the u128
+#[cfg(target_pointer_width = "32")]
+const TAG: usize = 0x8000_0000; // bit 31 of the ptr word == bit 63 of the u64/u128
+#[cfg(target_pointer_width = "64")]
+const NEGATED_TAG: usize = !TAG;
+#[cfg(target_pointer_width = "32")]
 const NEGATED_TAG: usize = !TAG;
 
 impl SmolStr {
@@ -75,7 +85,10 @@ impl SmolStr {
 
     pub fn len(&self) -> u32 {
         if self.is_inlined() {
-            return ((self.raw_ptr_bits() >> 56) & 0b0111_1111) as u32;
+            #[cfg(target_pointer_width = "64")]
+            { return ((self.raw_ptr_bits() >> 56) & 0b0111_1111) as u32; }
+            #[cfg(target_pointer_width = "32")]
+            { return ((self.raw_ptr_bits() >> 24) & 0b0111_1111) as u32; }
         }
         self.raw_len()
     }

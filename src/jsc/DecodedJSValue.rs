@@ -1,4 +1,6 @@
-use crate::{JSCell, JSValue, ffi};
+use crate::{JSCell, JSValue};
+#[cfg(target_pointer_width = "64")]
+use crate::ffi;
 
 /// ABI-compatible with `JSC::JSValue`.
 #[repr(C)]
@@ -46,7 +48,15 @@ impl DecodedJSValue {
 
     /// Equivalent to `JSC::JSValue::isCell`. Note that like JSC, this method treats 0 as a cell.
     pub fn is_cell(self) -> bool {
-        self.as_u64() & ffi::NOT_CELL_MASK == 0
+        #[cfg(target_pointer_width = "64")]
+        {
+            self.as_u64() & ffi::NOT_CELL_MASK == 0
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            // SAFETY: `as_bits` is the tag/payload view of the 8-byte encoding.
+            unsafe { self.u.as_bits.tag as u32 == 0xffff_fffb }
+        }
     }
 
     /// Equivalent to `JSC::JSValue::asCell`.
@@ -55,10 +65,19 @@ impl DecodedJSValue {
         // is_cell() guarantees the encoded bits ARE the (possibly-null) JSCell
         // pointer; safe int→ptr `as` cast replaces the union pun (same idiom as
         // `JSValue::as_ptr` — provenance is FFI-exposed by JSC's C++ side).
-        self.bits() as usize as *mut JSCell
+        #[cfg(target_pointer_width = "64")]
+        {
+            self.bits() as usize as *mut JSCell
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            // SAFETY: `as_bits.payload` is the low 32-bit cell pointer.
+            unsafe { self.u.as_bits.payload as u32 as usize as *mut JSCell }
+        }
     }
 }
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(
     core::mem::size_of::<usize>() == 8,
     "EncodedValueDescriptor assumes a 64-bit system",

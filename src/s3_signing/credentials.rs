@@ -65,7 +65,10 @@ pub struct MultiPartUploadOptions {
 impl MultiPartUploadOptions {
     pub const ONE_MIB: usize = 1_048_576;
     /// we limit to 5 GiB
+    #[cfg(target_pointer_width = "64")]
     pub const MAX_SINGLE_UPLOAD_SIZE: usize = 5120 * Self::ONE_MIB;
+    #[cfg(target_pointer_width = "32")]
+    pub const MAX_SINGLE_UPLOAD_SIZE: usize = 4 * Self::ONE_MIB;
     pub const MIN_SINGLE_UPLOAD_SIZE: usize = 5 * Self::ONE_MIB;
     pub const DEFAULT_PART_SIZE: usize = Self::MIN_SINGLE_UPLOAD_SIZE;
     /// dont make sense more than this because we use fetch; anything greater will be 64

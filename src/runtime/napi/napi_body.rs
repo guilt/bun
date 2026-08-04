@@ -197,8 +197,8 @@ unsafe extern "C" {
     pub(super) fn NapiHandleScope__open(env: *mut NapiEnv, escapable: bool)
     -> *mut NapiHandleScope;
     pub(super) fn NapiHandleScope__close(env: *mut NapiEnv, current: *mut NapiHandleScope);
-    fn NapiHandleScope__append(env: *mut NapiEnv, value: usize);
-    fn NapiHandleScope__escape(handle_scope: *mut NapiHandleScope, value: usize) -> bool;
+    fn NapiHandleScope__append(env: *mut NapiEnv, value: u64);
+    fn NapiHandleScope__escape(handle_scope: *mut NapiHandleScope, value: u64) -> bool;
 }
 
 #[derive(Debug, thiserror::Error, strum::IntoStaticStr)]
@@ -298,7 +298,7 @@ impl napi_value {
     }
 
     pub fn get(self) -> JSValue {
-        JSValue::from_encoded(self.0 as usize)
+        JSValue::from_encoded(self.0 as u64)
     }
 
     pub fn create(env: &NapiEnv, val: JSValue) -> napi_value {
@@ -3364,7 +3364,7 @@ mod v8_api {
     }
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, not(target_arch = "x86")))]
 mod v8_api {
     use core::ffi::c_void;
     // MSVC name mangling is different than it is on unix.
@@ -4476,7 +4476,7 @@ pub fn fix_dead_code_elimination() {
             _ZN2v812api_internal17FromJustIsNothingEv, uv_os_getpid, uv_os_getppid,
         );
     }
-    #[cfg(windows)]
+    #[cfg(all(windows, not(target_arch = "x86")))]
     {
         use v8_api::*;
         keep_symbols!(

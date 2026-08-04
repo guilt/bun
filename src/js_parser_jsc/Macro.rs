@@ -321,7 +321,7 @@ pub(crate) fn __bun_macro_context_call(
     // SAFETY: `data` is the `Box<MacroContext>` allocated in `init` above; the
     // lower-tier handle is uniquely borrowed for this call so no alias exists.
     let inner = unsafe { &mut *ctx.data.cast::<MacroContext>() };
-    inner.javascript_object = JSValue::from_encoded(ctx.javascript_object.0 as usize);
+    inner.javascript_object = JSValue::from_encoded(ctx.javascript_object.0 as u64);
     let caller_loc = caller.loc;
     inner
         .call(

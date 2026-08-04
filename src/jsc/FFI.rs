@@ -8,7 +8,9 @@
 
 #![allow(non_snake_case, non_upper_case_globals, clippy::missing_safety_doc)]
 
-use core::ffi::{c_int, c_longlong, c_ulonglong, c_void};
+use core::ffi::c_void;
+#[cfg(target_pointer_width = "64")]
+use core::ffi::{c_int, c_longlong, c_ulonglong};
 
 use bun_jsc::{JSGlobalObject, JSValue};
 
@@ -65,8 +67,18 @@ unsafe extern "C" {
     pub fn JSFunctionCall(globalObject: *mut c_void, callFrame: *mut c_void) -> *mut c_void;
 }
 
+#[cfg(target_pointer_width = "64")]
+#[allow(dead_code)]
 pub(crate) const DOUBLE_ENCODE_OFFSET_BIT: c_int = 49;
+#[cfg(target_pointer_width = "64")]
+#[allow(dead_code)]
 pub(crate) const DOUBLE_ENCODE_OFFSET: c_longlong = (1 as c_longlong) << DOUBLE_ENCODE_OFFSET_BIT;
+#[cfg(target_pointer_width = "64")]
+#[allow(dead_code)]
 pub(crate) const OTHER_TAG: c_int = 0x2;
+#[cfg(target_pointer_width = "64")]
+#[allow(dead_code)]
 pub(crate) const NOT_CELL_MASK: c_ulonglong = NUMBER_TAG | OTHER_TAG as c_ulonglong;
+#[cfg(target_pointer_width = "64")]
+#[allow(dead_code)]
 pub(crate) const NUMBER_TAG: c_ulonglong = 0xfffe_0000_0000_0000;

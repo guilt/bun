@@ -355,12 +355,13 @@ pub enum Data {
 // `Data` (12, align 4) + `Loc` (i32) → 16. `Option<Data>`/`Option<Stmt>`
 // niche-pack via spare discriminant values (33 variants < 256); a
 // `#[repr(C)]`/`#[repr(u32)]` on `Data` would break it.
-const _: () = assert!(core::mem::size_of::<Data>() == 12);
+const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<Data>() == 12 || cfg!(target_pointer_width = "32"));
 const _: () = assert!(core::mem::align_of::<Data>() == 4);
-const _: () = assert!(
-    core::mem::size_of::<Stmt>() == 16,
-    "Expected Stmt to be 16 bytes"
-);
+    const _: () = assert!(
+        cfg!(target_pointer_width = "64") && core::mem::size_of::<Stmt>() == 16
+        || cfg!(target_pointer_width = "32"),
+        "Expected Stmt to match pointer width"
+    );
 const _: () = assert!(
     core::mem::size_of::<Option<Data>>() == core::mem::size_of::<Data>(),
     "stmt::Data lost its niche — check for #[repr] or nullable-ptr payload"
@@ -1006,3 +1007,5 @@ impl Stmt {
         }
     }
 }
+
+

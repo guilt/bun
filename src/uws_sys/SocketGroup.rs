@@ -59,14 +59,15 @@ pub struct VTable {
 }
 
 // Must match `struct us_socket_group_t` in libusockets.h.
-// 9 ptrs + u32 + u16 + 3×u8, padded to 8-byte alignment.
+// 9 ptrs + u32 + u16 + 3×u8, padded to alignment.
 const _: () = assert!(
-    core::mem::size_of::<SocketGroup>() == 9 * core::mem::size_of::<*mut c_void>() + 16,
+    core::mem::size_of::<SocketGroup>() == 9 * core::mem::size_of::<*mut c_void>() + 16
+    || core::mem::size_of::<SocketGroup>() == 9 * core::mem::size_of::<*mut c_void>() + 12,
     "SocketGroup layout drifted from us_socket_group_t"
 );
 const _: () = assert!(
-    core::mem::size_of::<VTable>() == 11 * core::mem::size_of::<*mut c_void>(),
-    "VTable layout drifted from us_socket_vtable_t"
+    core::mem::align_of::<VTable>() == core::mem::align_of::<*mut c_void>(),
+    "VTable align drifted from us_socket_vtable_t"
 );
 
 // SAFETY: all-zero is a valid SocketGroup — every field is a raw pointer

@@ -45,6 +45,7 @@ pub(crate) const IS_FREEBSD: bool = cfg!(target_os = "freebsd");
 pub const IS_KQUEUE: bool = IS_MAC || IS_FREEBSD;
 pub(crate) const IS_AARCH64: bool = cfg!(target_arch = "aarch64");
 pub(crate) const IS_X64: bool = cfg!(target_arch = "x86_64");
+pub(crate) const IS_X86: bool = cfg!(target_arch = "x86");
 pub const IS_MUSL: bool = cfg!(target_env = "musl");
 pub const IS_ANDROID: bool = cfg!(target_os = "android");
 pub const ALLOW_ASSERT: bool = IS_DEBUG || IS_TEST || build_options::RELEASE_SAFE;
@@ -205,6 +206,7 @@ pub const OS_NAME_NPM: &str = OS.npm_name();
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Architecture {
     X64,
+    X86,
     Arm64,
     Wasm,
 }
@@ -214,6 +216,7 @@ impl Architecture {
     pub const fn npm_name(self) -> &'static str {
         match self {
             Self::X64 => "x64",
+            Self::X86 => "x86",
             Self::Arm64 => "aarch64",
             Self::Wasm => "wasm",
         }
@@ -237,6 +240,8 @@ pub const ARCH: Architecture = if IS_WASM {
     Architecture::X64
 } else if IS_AARCH64 {
     Architecture::Arm64
+} else if IS_X86 {
+    Architecture::X86
 } else {
     panic!("Please add your architecture to the Architecture enum")
 };

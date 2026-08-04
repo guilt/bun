@@ -1938,7 +1938,10 @@ impl fs_t {
     #[inline(always)]
     pub fn uninitialized() -> fs_t {
         let mut v: fs_t = bun_core::ffi::zeroed();
-        v.loop_ = 0xAAAA_AAAA_AAAA_0000usize as *mut Loop;
+        #[cfg(target_pointer_width = "64")]
+        { v.loop_ = 0xAAAA_AAAA_AAAA_0000usize as *mut Loop; }
+        #[cfg(target_pointer_width = "32")]
+        { v.loop_ = 0xAAAA_0000usize as *mut Loop; }
         v
     }
 
@@ -1951,18 +1954,31 @@ impl fs_t {
     }
     #[inline]
     fn assert_initialized(&self) {
-        #[cfg(debug_assertions)]
+        #[cfg(all(debug_assertions, target_pointer_width = "64"))]
         if self.loop_ as usize == 0xAAAA_AAAA_AAAA_0000usize {
+            panic!("uv_fs_t was not initialized");
+        }
+        #[cfg(all(debug_assertions, target_pointer_width = "32"))]
+        if self.loop_ as usize == 0xAAAA_0000usize {
             panic!("uv_fs_t was not initialized");
         }
     }
     #[inline]
     pub fn assert_cleaned_up(&self) {
-        #[cfg(debug_assertions)]
+        #[cfg(all(debug_assertions, target_pointer_width = "64"))]
         {
             if self.loop_ as usize == 0xAAAA_AAAA_AAAA_0000usize {
                 return;
             }
+        }
+        #[cfg(all(debug_assertions, target_pointer_width = "32"))]
+        {
+            if self.loop_ as usize == 0xAAAA_0000usize {
+                return;
+            }
+        }
+        #[cfg(debug_assertions)]
+        {
             if (self.flags & Self::UV_FS_CLEANEDUP) != 0 {
                 return;
             }

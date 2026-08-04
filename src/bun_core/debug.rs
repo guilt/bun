@@ -213,6 +213,7 @@ pub struct StackIterator {
     ma: MemoryAccessor,
 }
 
+#[allow(dead_code)]
 impl StackIterator {
     // Offset of the saved BP wrt the frame pointer.
     const FP_OFFSET: usize = if cfg!(any(target_arch = "riscv64", target_arch = "riscv32")) {
@@ -262,6 +263,7 @@ impl StackIterator {
     }
 }
 
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 pub(crate) const PC_OFFSET: usize = StackIterator::PC_OFFSET;
 
 /// Capture the current thread's call stack.

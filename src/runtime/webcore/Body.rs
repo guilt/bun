@@ -2231,6 +2231,7 @@ fn handle_body_error(value: &mut Value, global_object: &JSGlobalObject) -> Optio
 pub(crate) type ValueBuffererCallback =
     fn(ctx: *mut c_void, bytes: &[u8], err: Option<ValueError>, is_async: bool);
 
+#[repr(C, align(8))]
 pub struct ValueBufferer<'a> {
     pub ctx: *mut c_void,
     pub on_finished_buffering: ValueBuffererCallback,

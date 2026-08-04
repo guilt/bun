@@ -24,7 +24,11 @@ pub struct BabyVec<'a, T> {
     alloc: &'a MimallocArena,
 }
 
-const _: () = assert!(size_of::<BabyVec<'static, u8>>() == 24);
+const _: () = if cfg!(target_pointer_width = "64") {
+    assert!(size_of::<BabyVec<'static, u8>>() == 24);
+} else {
+    assert!(size_of::<BabyVec<'static, u8>>() == 16);
+};
 
 // SAFETY: same as `Vec<T, &MimallocArena>` — `Send`/`Sync` follow `T` and the
 // allocator handle (`&MimallocArena: Sync` is already declared upstream; the

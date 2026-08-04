@@ -3431,8 +3431,6 @@ pub fn translate_nt_status_to_errno(err: NTSTATUS) -> E {
     e
 }
 
-pub use bun_windows_sys::externs::GetHostNameW;
-
 /// https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-gettemppathw
 pub use bun_windows_sys::externs::GetTempPathW;
 

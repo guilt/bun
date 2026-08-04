@@ -94,11 +94,15 @@ mod nt {
     // (matches `ExitProcess`, already `safe fn` in `bun_windows_sys`). This
     // freestanding `no_std` shim owns every handle it closes; no
     // `OwnedHandle`-style I/O-safety invariant exists to violate.
-    #[link(name = "ntdll")]
+    // RtlExitUserProcess is NOT in XP's ntdll; provided by our C++ stubs.
+    // Declared without #[link] so linker resolves from our .obj not ntdll.lib.
     unsafe extern "system" {
         /// undocumented
         pub(super) safe fn RtlExitUserProcess(ExitStatus: u32) -> !;
+    }
 
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
         /// https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntclose
         pub(super) safe fn NtClose(Handle: HANDLE) -> Status;
     }

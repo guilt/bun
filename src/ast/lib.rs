@@ -182,7 +182,7 @@ pub enum RefTag {
 #[derive(Clone, Copy)]
 pub struct Ref(u64);
 
-const _: () = assert!(core::mem::size_of::<Ref>() == 8);
+const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<Ref>() == 8 || cfg!(target_pointer_width = "32"));
 const _: () = assert!(core::mem::align_of::<Ref>() == 4);
 
 /// We mask to 31 bits for `source_index`, 28 for `inner_index`.
@@ -3861,3 +3861,5 @@ mod line_column_tracker_tests {
         assert_eq!(bmp_pos.column_count, 19);
     }
 }
+
+

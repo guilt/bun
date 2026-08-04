@@ -906,8 +906,9 @@ fn FIELDS() -> [(&'static str, jsc::JSHostFn); 8] {
     ]
 }
 
-const MAX_ADDRESSABLE_MEMORY: usize = u56_max();
-
-const fn u56_max() -> usize {
-    (1usize << 56) - 1
-}
+const MAX_ADDRESSABLE_MEMORY: usize = {
+    #[cfg(target_pointer_width = "64")]
+    { (1usize << 56) - 1 }
+    #[cfg(target_pointer_width = "32")]
+    { usize::MAX }
+};

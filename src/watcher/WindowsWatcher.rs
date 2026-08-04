@@ -85,14 +85,15 @@ pub struct DirWatcher {
     pub dir_handle: HANDLE,
 }
 
-// `OVERLAPPED` = 32 bytes / align 8 on Win64; `buf` must be ≥ 4-aligned for
-// the `*FILE_NOTIFY_INFORMATION` cast. Asserting the offset (not just the
-// total size) is what proves that alignment requirement.
+// `OVERLAPPED` = 32 bytes / align 8 on Win64, smaller on Win32;
+// `buf` must be ≥ 4-aligned for the `*FILE_NOTIFY_INFORMATION` cast.
+// Asserting the offset (not just the total size) proves alignment.
 bun_core::assert_ffi_layout!(
     DirWatcher,
-    32 + 64 * 1024 + ::core::mem::size_of::<HANDLE>(),
+    ::core::mem::size_of::<w::OVERLAPPED>() + 64 * 1024 + ::core::mem::size_of::<HANDLE>(),
     ::core::mem::align_of::<w::OVERLAPPED>();
-    overlapped @ 0, buf @ 32, dir_handle @ 32 + 64 * 1024,
+    overlapped @ 0, buf @ ::core::mem::size_of::<w::OVERLAPPED>(),
+    dir_handle @ ::core::mem::size_of::<w::OVERLAPPED>() + 64 * 1024,
 );
 const _: () = assert!(
     ::core::mem::offset_of!(DirWatcher, buf)
