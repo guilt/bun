@@ -299,6 +299,8 @@ fn apply_patch(patch: &FilePatch<'_>, patch_dir: Fd, state: &mut ApplyState) -> 
     // to use the arena
     let _use_arena: bool = stat.st_size as usize <= PAGE_SIZE;
     let filebuf: Vec<u8> = match read_file_alloc(patch_dir, &file_path, {
+        // ~4 GiB cap. On 32-bit, 4 GiB overflows usize, so usize::MAX is the
+        // largest representable limit (4 GiB − 1) — same effective cap.
         #[cfg(target_pointer_width = "64")]
         { 1024 * 1024 * 1024 * 4 }
         #[cfg(target_pointer_width = "32")]

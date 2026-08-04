@@ -174,14 +174,18 @@ impl ZAllocator {
 pub(crate) mod memory_allocator_tags {
     use core::ffi::c_void;
 
+    // "BEEFA110C"  beef a110c i guess
     #[cfg(target_pointer_width = "64")]
     const DEFAULT_ALLOCATOR_TAG: u64 = 0xBEEFA110C;
+    // 32-bit pointers (4 bytes) can't hold the full tag; use a shorter one.
     #[cfg(target_pointer_width = "32")]
     const DEFAULT_ALLOCATOR_TAG: u32 = 0xBEEFA11;
     pub(crate) const DEFAULT_ALLOCATOR_TAG_PTR: *mut c_void = DEFAULT_ALLOCATOR_TAG as *mut c_void;
 
+    // "z4110c4701" (Z ALLOCATOR in 1337 speak)
     #[cfg(target_pointer_width = "64")]
     const Z_ALLOCATOR_TAG: u64 = 0x2a11043470123;
+    // 32-bit pointers (4 bytes) can't hold the full tag; use a shorter one.
     #[cfg(target_pointer_width = "32")]
     const Z_ALLOCATOR_TAG: u32 = 0x2a11043;
     pub(crate) const Z_ALLOCATOR_TAG_PTR: *mut c_void = Z_ALLOCATOR_TAG as *mut c_void;

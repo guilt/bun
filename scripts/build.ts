@@ -114,8 +114,6 @@ async function main(): Promise<void> {
     return merged;
   };
 
-  // Host-cc LIB fix is handled inside the dep_host_cc rule in source.ts.
-
   if (isCI) {
     // CI: machine/env dump + collapsible groups + annotation-on-failure.
     printEnvironment();

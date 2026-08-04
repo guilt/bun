@@ -277,5 +277,3 @@ impl Binding {
         }
     }
 }
-
-

@@ -1836,9 +1836,11 @@ pub enum Data {
 // payload → 12 at align 4. `Expr` = `Data` (12, align 4) + `Loc` (i32) → 16.
 // `Option<Data>`/`Option<Expr>` niche-pack via spare discriminant values
 // (47 variants < 256); a `#[repr(C)]`/`#[repr(u32)]` on `Data` would break it.
-const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<Data>() == 12 || cfg!(target_pointer_width = "32")); // Do not increase the size of Expr
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(core::mem::size_of::<Data>() == 12); // Do not increase the size of Expr
 const _: () = assert!(core::mem::align_of::<Data>() == 4);
-const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<Expr>() == 16 || cfg!(target_pointer_width = "32"));
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(core::mem::size_of::<Expr>() == 16);
 const _: () = assert!(
     core::mem::size_of::<Option<Data>>() == core::mem::size_of::<Data>(),
     "expr::Data lost its niche — check for #[repr] or nullable-ptr payload"
@@ -1849,11 +1851,15 @@ const _: () = assert!(
 );
 // Inline-payload ceilings (regress any of these and `Data` grows past 12).
 // `align_of <= 4` is what keeps `Data` (and therefore `Expr`) at align 4.
-const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<E::Identifier>() == 8 || cfg!(target_pointer_width = "32"));
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(core::mem::size_of::<E::Identifier>() == 8);
 const _: () = assert!(core::mem::align_of::<E::Identifier>() == 4);
-const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<E::ImportIdentifier>() == 8 || cfg!(target_pointer_width = "32"));
-const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<E::CommonJSExportIdentifier>() == 8 || cfg!(target_pointer_width = "32"));
-const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<E::PrivateIdentifier>() == 8 || cfg!(target_pointer_width = "32"));
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(core::mem::size_of::<E::ImportIdentifier>() == 8);
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(core::mem::size_of::<E::CommonJSExportIdentifier>() == 8);
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(core::mem::size_of::<E::PrivateIdentifier>() == 8);
 const _: () = assert!(core::mem::size_of::<E::Number>() <= 8);
 const _: () = assert!(core::mem::align_of::<E::Number>() == 4);
 const _: () = assert!(core::mem::size_of::<E::Special>() <= 8);
@@ -1861,9 +1867,11 @@ const _: () = assert!(core::mem::size_of::<E::RequireString>() <= 8);
 const _: () = assert!(core::mem::size_of::<E::NewTarget>() <= 8);
 const _: () = assert!(core::mem::size_of::<StoreRef<E::Binary>>() == core::mem::size_of::<usize>());
 // Heap-payload shrinks unlocked by the 12-byte StoreSlice<T>:
-const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<crate::G::FnBody>() == 16 || cfg!(target_pointer_width = "32"));
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(core::mem::size_of::<crate::G::FnBody>() == 16);
 const _: () = assert!(core::mem::size_of::<E::Arrow>() <= 32);
-const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<crate::S::Block>() == 16 || cfg!(target_pointer_width = "32"));
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(core::mem::size_of::<crate::S::Block>() == 16);
 
 // Field-style accessors (`data.e_string()`, `data.e_object()`). The match arms
 // in this file use these heavily; keeping them as inherent methods avoids
@@ -3573,4 +3581,3 @@ fn string_to_equivalent_number_value(str: &[u8]) -> f64 {
     // only (no mutation, no retention past return).
     unsafe { JSC__jsToNumber(str.as_ptr(), str.len()) }
 }
-

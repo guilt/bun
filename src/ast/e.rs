@@ -376,7 +376,8 @@ pub struct Arrow {
     pub has_react_hooks_suppression: bool,
 }
 // The fourth bool fits in existing trailing padding.
-const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<Arrow>() == 32 || cfg!(target_pointer_width = "32"));
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(core::mem::size_of::<Arrow>() == 32);
 impl Arrow {
     pub const NOOP_RETURN_UNDEFINED: Arrow = Arrow {
         args: crate::StoreSlice::EMPTY,
@@ -705,7 +706,8 @@ pub struct Number {
     value: f64,
 }
 
-const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<Number>() == 8 || cfg!(target_pointer_width = "32"));
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(core::mem::size_of::<Number>() == 8);
 const _: () = assert!(core::mem::align_of::<Number>() == 4);
 
 impl Number {
@@ -897,7 +899,8 @@ pub enum JsonValue {
     Array(StoreRef<ArrayJSON>),
 }
 
-const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<JsonValue>() == 16 || cfg!(target_pointer_width = "32"));
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(core::mem::size_of::<JsonValue>() == 16);
 const _: () = assert!(core::mem::align_of::<JsonValue>() == 4);
 
 impl JsonValue {
@@ -966,7 +969,8 @@ pub struct PropertyJSON {
     pub value: JsonValue,
 }
 
-const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<PropertyJSON>() == 32 || cfg!(target_pointer_width = "32"));
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(core::mem::size_of::<PropertyJSON>() == 32);
 
 /// Where a [`JsonTape`]'s buffers (and, in arena mode, the tape itself) live.
 #[derive(Clone, Copy)]
@@ -2664,4 +2668,3 @@ mod json_tape_tests {
         assert_eq!(outer.properties()[0].key.slice(), b"a");
     }
 }
-

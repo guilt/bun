@@ -172,7 +172,8 @@ pub struct StoreStr {
     len: u32,
 }
 
-const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<StoreStr>() == 12 || cfg!(target_pointer_width = "32"));
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(core::mem::size_of::<StoreStr>() == 12);
 const _: () = assert!(core::mem::align_of::<StoreStr>() == 4);
 
 // SAFETY: same rationale as `StoreRef` — points into a single-threaded bump
@@ -575,7 +576,8 @@ pub struct LocRef {
     pub ref_: Ref,
 }
 
-const _: () = assert!(cfg!(target_pointer_width = "64") && core::mem::size_of::<LocRef>() == 12 || cfg!(target_pointer_width = "32"));
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(core::mem::size_of::<LocRef>() == 12);
 
 impl Default for LocRef {
     fn default() -> Self {
@@ -1343,5 +1345,3 @@ pub mod math {
 // LIFETIMES.tsv: value slices point into the parser arena → `StoreStr`
 // (arena-owned, no `'bump` cascade).
 pub type MangledProps = ArrayHashMap<Ref, StoreStr>;
-
-

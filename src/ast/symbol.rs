@@ -770,4 +770,3 @@ impl Symbol {
         kind.is_private()
     }
 }
-
