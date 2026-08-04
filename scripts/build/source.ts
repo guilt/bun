@@ -569,9 +569,11 @@ export function registerDepRules(n: Ninja, cfg: Config): void {
   // Patch local source: apply .patch files to a local/in-tree dep source dir.
   // Uses git apply with --reverse --check to detect already-applied patches
   // (applying to a clean checkout would fail), and writes a .patched stamp so
-  // ninja re-patches when patch files change.
+  // ninja re-patches when patch files change. The stamp path is passed
+  // explicitly ($stamp) so fetch-cli can write it — it can't be inferred from
+  // $srcdir, and the build edge knows the real output path.
   n.rule("dep_patch_local", {
-    command: `${stream} ${cfg.jsRuntime} ${fetchCli} apply-local-patches $srcdir $patches`,
+    command: `${stream} ${cfg.jsRuntime} ${fetchCli} apply-local-patches $srcdir $stamp $patches`,
     description: "patch $name (local)",
     restat: true,
   });
@@ -840,6 +842,7 @@ export function resolveDep(
         vars: {
           name: dep.name,
           srcdir: srcDir,
+          stamp: patchStamp,
           patches: patches.map(p => quote(resolve(cfg.cwd, p))).join(" "),
         },
       });

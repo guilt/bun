@@ -497,8 +497,60 @@ embedded, so no `js/` directory is needed either. Deploy:
 | `BUN_ICU_PATH` | Path to an ICU 78.3 source root (default `vendor/icu/icu4c/source`); mirrors `BUN_WEBKIT_PATH`. |
 | `EXTDEV` | External-tools root (`D:\WS\EXTDEV`); rust9x toolchain junction target. |
 | `MAKEFLAGS` | **Removed** by `build-icu.ps1` at runtime — Git's env sets `j23`, which NMAKE rejects (`U1065`). |
-| `PATH` | Needs `C:\Program Files\Git\usr\bin` (perl for ninja/codegen) and `py` on PATH (Python 3 for the ICU data build; the `py.cmd` shim in `%EXTDEV%\Bin` selects the interpreter by `-3`/`-3.x`/`-2`/`-2.x` selector or the AUTOEXEC `PYTHON*_HOME`/`PYTHON*_VERSION` variables). If clang/llvm tools fail to be found outside the VS dev shell, prepend `C:\Program Files\LLVM\bin`. |
+| `PATH` | Needs `py` on PATH (Python 3 for the ICU data build; the `py.cmd` shim in `%EXTDEV%\Bin` selects the interpreter by `-3`/`-3.x`/`-2`/`-2.x` selector or the AUTOEXEC `PYTHON*_HOME`/`PYTHON*_VERSION` variables). If clang/llvm tools fail to be found outside the VS dev shell, prepend `C:\Program Files\LLVM\bin`. **You no longer need to add Git's `usr\bin` to `PATH` for perl** — the build auto-detects it (see Reproducibility below). |
 | `VSINSTALLDIR` | Set by running inside a VS developer shell (x64). `scripts/build.ts` auto-re-execs if unset. |
+
+## Reproducibility
+
+A fresh machine should be able to run `bun run build --profile=win9x-debug`
+with no manual `PATH` edits or hidden prerequisites. The build system handles
+the following automatically:
+
+### Perl auto-detection (LUT codegen + WebKit)
+
+Several codegen steps shell out to **perl** (`create-hash-table.ts` parses
+`@begin … @end` blocks into JSC `HashTableValue` arrays), and WebKit's cmake
+runs `find_package(Perl)`. Historically this required Git for Windows'
+`usr\bin` to be manually added to `PATH`. Now:
+
+- **`findPerl()`** (`scripts/build/tools.ts`) searches, in order:
+  `%PERL5_HOME%`/`%PERL_HOME%`'s `bin`, `%EXTDEV%\Perl%PERL5_VERSION%\bin`,
+  `%EXTDEV%\Perl\bin`, Git for Windows' bundled `perl` at
+  `%ProgramFiles%\Git\usr\bin`, `%ProgramFiles(x86)%\Git\usr\bin`, and
+  `%LocalAppData%\Programs\Git\usr\bin` (per-user install), and finally `PATH`.
+- **LUT codegen** (`scripts/build/codegen.ts` `registerCodegenRules`): the
+  `codegen` rule prepends the resolved perl's bin dir to `PATH`, so the
+  build-time `perl` invocation resolves even when Git's perl isn't on the
+  machine's `PATH`.
+- **WebKit cmake** (`scripts/build/deps/webkit.ts`): on Windows it passes
+  `-DPERL_EXECUTABLE=<resolved perl>` to cmake, satisfying `find_package(Perl)`
+  deterministically.
+
+### `TARGET_ARCH` for 32-bit targets (`scripts/build/codegen.ts`)
+
+`codegenTarget()` previously returned `"arm64"` for **any** non-x64 target,
+so an i586/x86 build baked `process.arch = "arm64"` into the bundled built-ins.
+It now returns `"x86"` when `cfg.x86` is set. That exposed two pre-existing
+`os.ts` hardcoded `$bundleError` "TODO" branches that only knew
+arm64/x64 — `src/js/node/os.ts` `endianness()` and `machine()` now handle
+`"x86"` (`endianness → "LE"`, `machine → "x86"`, matching Node on Windows x86).
+
+### `.patched` stamp actually written (`scripts/build/fetch-cli.ts`)
+
+`dep_patch_local` declared `stamps/<dep>.patched` as its output, but
+`applyLocalPatches()` never wrote it — so the stamp never existed and the
+ICU/WebKit patch **and** prebuild steps re-ran on **every** build. The ninja
+rule now passes the stamp path (`apply-local-patches $srcdir $stamp $patches`,
+`source.ts`), and `applyLocalPatches()` writes it (idempotently, via
+`writeIfChanged`, keyed on the patch-identity hash) after applying patches.
+Editing a patch bumps the stamp and correctly invalidates downstream.
+
+### ICU file-copy retry (`scripts/build/deps/icu/build-icu.ps1`)
+
+`Copy-Item` can fail transiently with "**user-mapped section open**" when AV
+scanning / the search indexer / a leftover ICU tool has a file memory-mapped.
+The header and library copies now go through `Copy-IcuFile`, which retries (5
+attempts, 2 s apart) before failing the build.
 
 ## ICU local build (mirrors local WebKit)
 

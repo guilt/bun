@@ -44,6 +44,7 @@ import { writeIfChanged } from "./fs.ts";
 import { generateJsonByteClass } from "./jsonByteClass.ts";
 import type { Ninja } from "./ninja.ts";
 import { quote, quoteArgs } from "./shell.ts";
+import { findPerl } from "./tools.ts";
 
 // The individual emit functions take these four params. Bundled to keep
 // signatures short.
@@ -93,7 +94,7 @@ function codegenTarget(cfg: Config): { platform: string; arch: string } {
           : cfg.os === "freebsd"
             ? "freebsd"
             : "linux";
-  const arch = cfg.x64 ? "x64" : "arm64";
+  const arch = cfg.x64 ? "x64" : cfg.x86 ? "x86" : "arm64";
   return { platform, arch };
 }
 
@@ -118,9 +119,17 @@ export function registerCodegenRules(n: Ninja, cfg: Config): void {
   // restat = 1 because most scripts use writeIfNotChanged(). Scripts that
   // don't (generate-jssink) always write → restat is a no-op for
   // them, no harm.
+  //
+  // The create-hash-table.ts LUT step shells out to `perl`. Resolve it here
+  // and prepend its dir to PATH so the ninja rule finds it at build time —
+  // findPerl() also locates Git for Windows' bundled perl, which is typically
+  // NOT on PATH. Prepend as dirname(perl) so Git's msys perl and its DLLs
+  // resolve together.
+  const perl = findPerl();
+  const perlBin = perl ? dirname(perl) : undefined;
   const env = hostWin
-    ? `set TARGET_PLATFORM=${platform}&& set TARGET_ARCH=${arch}&& `
-    : `TARGET_PLATFORM=${platform} TARGET_ARCH=${arch} `;
+    ? `${perlBin ? `set PATH=${perlBin};%PATH%&& ` : ""}set TARGET_PLATFORM=${platform}&& set TARGET_ARCH=${arch}&& `
+    : `${perlBin ? `PATH=${q(perlBin)}:$PATH ` : ""}TARGET_PLATFORM=${platform} TARGET_ARCH=${arch} `;
   n.rule("codegen", {
     command: hostWin ? `cmd /c "cd /d $cwd && ${env}${bun} $args"` : `cd $cwd && ${env}${bun} $args`,
     description: "gen $desc",

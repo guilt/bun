@@ -49,6 +49,7 @@ import { join, resolve } from "node:path";
 import type { Config } from "../config.ts";
 import { computeCpuTargetFlags } from "../flags.ts";
 import { slash } from "../shell.ts";
+import { findPerl } from "../tools.ts";
 import { type Dependency, type NestedCmakeBuild, type Source, depBuildDir, depSourceDir } from "../source.ts";
 import { icuRootDir } from "./icu.ts";
 
@@ -357,6 +358,12 @@ export const webkit: Dependency = {
       // with /MTd or /MT). Without this, cmake defaults to /MDd →
       // RuntimeLibrary mismatch at link.
       args.CMAKE_MSVC_RUNTIME_LIBRARY = cfg.debug ? "MultiThreadedDebug" : "MultiThreaded";
+      // WebKit's cmake runs find_package(Perl) for its generate-lut-files /
+      // hash-table scripts, which finds perl via $PERL_EXECUTABLE or PATH.
+      // Point it at the same perl the LUT codegen uses so configure works on
+      // a machine where Git's bundled perl isn't on PATH.
+      const perl = findPerl();
+      if (perl) args.PERL_EXECUTABLE = slash(perl);
       // ICU is its own dependency (deps/icu.ts) — prebuilt download or a
       // local static /MT source build. WebKit only consumes it via ICU_ROOT.
     }

@@ -22,9 +22,9 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, join, sep } from "node:path";
+import { basename, dirname, join, sep } from "node:path";
 import { downloadWithRetry, extractTarGz, fetchPrebuilt } from "./download.ts";
 import { BuildError, assert } from "./error.ts";
 import { writeIfChanged } from "./fs.ts";
@@ -76,10 +76,11 @@ async function main(): Promise<void> {
     }
 
     case "apply-local-patches": {
-      // fetch-cli.ts apply-local-patches <srcdir> <patch> [<patch>...]
-      const [srcdir, ...patchPaths] = args;
+      // fetch-cli.ts apply-local-patches <srcdir> <stamp> <patch> [<patch>...]
+      const [srcdir, stamp, ...patchPaths] = args;
       assert(srcdir !== undefined, "apply-local-patches: missing srcdir");
-      return applyLocalPatches(srcdir, patchPaths);
+      assert(stamp !== undefined, "apply-local-patches: missing stamp");
+      return applyLocalPatches(srcdir, stamp, patchPaths);
     }
 
     case "prebuilt": {
@@ -282,9 +283,11 @@ function applyPatch(dest: string, patchPath: string, patchBody: string): void {
 /**
  * Apply patches to a local source directory (e.g. vendor/WebKit/).
  * Skips already-applied patches by running `git apply -R --check` first.
- * Writes a `.patched` stamp file each time so ninja tracks freshness.
+ * Writes the `.patched` stamp LAST — if anything above failed, the missing
+ * stamp makes the next build retry. The stamp content is the patch identity,
+ * so editing a patch bumps the stamp and triggers re-patch + downstream.
  */
-function applyLocalPatches(srcdir: string, patchPaths: string[]): void {
+function applyLocalPatches(srcdir: string, stamp: string, patchPaths: string[]): void {
   for (const p of patchPaths) {
     const body = readFileSync(p, "utf8");
     const normalized = normalizeLf(body);
@@ -305,6 +308,11 @@ function applyLocalPatches(srcdir: string, patchPaths: string[]): void {
     // Not applied — apply now.
     applyPatch(srcdir, p, normalized);
   }
+
+  // Stamp parent dir may not exist on a fresh build (source.ts emits the
+  // edge before the stamps dir stamp is guaranteed).
+  mkdirSync(dirname(stamp), { recursive: true });
+  writeIfChanged(stamp, computeSourceIdentity("local", patchPaths.map(p => readFileSync(p, "utf8"))) + "\n");
 }
 
 // Only run if this file is the entry point (not imported as a module).

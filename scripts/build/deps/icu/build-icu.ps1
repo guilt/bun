@@ -380,12 +380,43 @@ foreach ($target in @("common", "i18n")) {
 Write-Host ""
 Write-Host ":: Copying ICU output files..."
 
+# Copy-Item can fail transiently with "user-mapped section open" when another
+# process (AV scan, search indexer, a leftover ICU tool) has the source or
+# destination file memory-mapped. Retry a few times before giving up.
+function Copy-IcuFile {
+    param(
+        [string]$Source,
+        [string]$Destination,
+        [switch]$Recursive,
+        [int]$MaxRetries = 5,
+        [int]$RetryDelayMs = 2000
+    )
+
+    for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
+        try {
+            if ($Recursive) {
+                Copy-Item -Recurse -Force $Source $Destination -ErrorAction Stop
+            } else {
+                Copy-Item -Force $Source $Destination -ErrorAction Stop
+            }
+            return
+        } catch {
+            if ($attempt -lt $MaxRetries) {
+                Write-Host "  Copy-Item failed (attempt $attempt/$MaxRetries): $($_.Exception.Message). Retrying in $RetryDelayMs ms..."
+                Start-Sleep -Milliseconds $RetryDelayMs
+            } else {
+                throw
+            }
+        }
+    }
+}
+
 $null = mkdir -Force "$ICU_INCLUDE_DIR/unicode"
 $null = mkdir -Force $ICU_LIB_DIR
 
 # Copy headers
-Copy-Item -r "$ICU_SOURCE_DIR/common/unicode/*" "$ICU_INCLUDE_DIR/unicode"
-Copy-Item -r "$ICU_SOURCE_DIR/i18n/unicode/*" "$ICU_INCLUDE_DIR/unicode"
+Copy-IcuFile -Source "$ICU_SOURCE_DIR/common/unicode/*" -Destination "$ICU_INCLUDE_DIR/unicode" -Recursive
+Copy-IcuFile -Source "$ICU_SOURCE_DIR/i18n/unicode/*" -Destination "$ICU_INCLUDE_DIR/unicode" -Recursive
 
 # Copy libraries
 # MSBuild outputs to: <project>/<Platform>/<Configuration>/<project>.lib
@@ -393,14 +424,14 @@ $commonLibSrc = Join-Path $ICU_SOURCE_DIR "common\$Platform\$BuildType\common.li
 $i18nLibSrc = Join-Path $ICU_SOURCE_DIR "i18n\$Platform\$BuildType\i18n.lib"
 
 if (Test-Path $commonLibSrc) {
-    Copy-Item $commonLibSrc "$ICU_LIB_DIR/icuuc.lib" -Force
+    Copy-IcuFile -Source $commonLibSrc -Destination "$ICU_LIB_DIR/icuuc.lib"
     Write-Host "  Copied: common.lib -> icuuc.lib"
 } else {
     throw "ICU common library not found at: $commonLibSrc"
 }
 
 if (Test-Path $i18nLibSrc) {
-    Copy-Item $i18nLibSrc "$ICU_LIB_DIR/icuin.lib" -Force
+    Copy-IcuFile -Source $i18nLibSrc -Destination "$ICU_LIB_DIR/icuin.lib"
     Write-Host "  Copied: i18n.lib -> icuin.lib"
 } else {
     throw "ICU i18n library not found at: $i18nLibSrc"
@@ -435,7 +466,7 @@ if (-not (Test-Path $icuDataLibSrc)) {
 }
 
 if (Test-Path $icuDataLibSrc) {
-    Copy-Item $icuDataLibSrc "$ICU_LIB_DIR/icudt.lib" -Force
+    Copy-IcuFile -Source $icuDataLibSrc -Destination "$ICU_LIB_DIR/icudt.lib"
     Write-Host "  Copied: $(Split-Path -Leaf $icuDataLibSrc) -> icudt.lib"
 } else {
     Write-Host ":: WARNING: ICU data library not found. Listing generated files..."

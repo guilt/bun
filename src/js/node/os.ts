@@ -97,7 +97,7 @@ function bound(binding) {
     },
     cpus: lazyCpus(binding),
     endianness: function () {
-      return process.arch === "arm64" || process.arch === "x64" //
+      return process.arch === "arm64" || process.arch === "x64" || process.arch === "x86" //
         ? "LE"
         : $bundleError("TODO: endianness");
     },
@@ -142,7 +142,9 @@ function bound(binding) {
           ? process.platform === "freebsd"
             ? "amd64"
             : "x86_64"
-          : $bundleError("TODO: machine");
+          : process.arch === "x86"
+            ? "x86"
+            : $bundleError("TODO: machine");
     },
     devNull: process.platform === "win32" ? "\\\\.\\nul" : "/dev/null",
     get EOL() {

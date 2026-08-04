@@ -652,12 +652,16 @@ export function findSystemTool(name: string, opts?: { required?: boolean; hint?:
 
 /**
  * Find perl for the LUT codegen (create-hash-table.ts). Honors the AUTOEXEC
- * convention before falling back to PATH:
+ * convention before falling back to PATH and known install locations:
  *
  *   1. %PERL5_HOME% / %PERL_HOME% — its bin dir (PERL5_HOME points at the
  *      EXTDEV Perl install, which keeps bin/ + Site/bin/ like AUTOEXEC).
  *   2. %EXTDEV%\Perl%PERL5_VERSION% — version-tagged EXTDEV install.
- *   3. PATH.
+ *   3. Git for Windows bundled perl (usr/bin) — %ProgramFiles%\Git and the
+ *      per-user %LocalAppData%\Programs\Git. A couple of local codegen steps
+ *      (create-hash-table.ts) shell out to perl; Git for Windows is the most
+ *      common way Windows devs have it.
+ *   4. PATH.
  *
  * Returns the perl executable path, or undefined when not found.
  */
@@ -671,6 +675,14 @@ export function findPerl(): string | undefined {
     const ver = process.env.PERL5_VERSION;
     if (ver) paths.push(join(extdev, `Perl${ver}`, "bin"));
     paths.push(join(extdev, "Perl", "bin"));
+  }
+
+  // Git for Windows bundles a working perl at usr/bin. Look in the machine-wide
+  // install and the per-user install.
+  for (const pf of [process.env.ProgramFiles, process.env["ProgramFiles(x86)"], process.env.LocalAppData]) {
+    if (!pf) continue;
+    paths.push(join(pf, "Git", "usr", "bin"));
+    paths.push(join(pf, "Programs", "Git", "usr", "bin"));
   }
 
   return findTool({ names: ["perl"], paths, required: false })?.path;
