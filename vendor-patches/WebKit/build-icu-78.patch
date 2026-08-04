@@ -1,0 +1,117 @@
+diff --git a/build-icu.ps1 b/build-icu.ps1
+index c474c056c9..c4eb7e1ba7 100644
+--- a/build-icu.ps1
++++ b/build-icu.ps1
+@@ -21,6 +21,10 @@ param(
+ 
+ $ErrorActionPreference = "Stop"
+ 
++# Git's build environment sets MAKEFLAGS (e.g. "j23"), which NMAKE rejects
++# with "U1065: invalid option 'j'" when msbuild runs NMAKE custom build steps.
++Remove-Item Env:MAKEFLAGS -ErrorAction SilentlyContinue
++
+ # Default output directory
+ if (-not $OutputDir) {
+     $OutputDir = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "WebKitBuild/icu"
+@@ -29,7 +33,7 @@ if (-not $OutputDir) {
+ $ICU_LIB_DIR = Join-Path $OutputDir "lib"
+ $ICU_INCLUDE_DIR = Join-Path $OutputDir "include"
+ 
+-$ICU_SOURCE_URL = "https://github.com/unicode-org/icu/releases/download/release-73-2/icu4c-73_2-src.tgz"
++$ICU_SOURCE_URL = "https://github.com/unicode-org/icu/releases/download/release-78.3/icu4c-78.3-sources.tgz"
+ 
+ # Verify Python 3 is available (required for ICU data build)
+ try {
+@@ -69,7 +73,7 @@ if (-not (Test-Path $ICU_SOURCE_DIR)) {
+     Write-Host ":: Extracting ICU"
+     # ICU tarball extracts to icu/ directory
+     $extractDir = Split-Path -Parent $OutputDir
+-    tar.exe -xzf $ICU_TARBALL -C $extractDir
++    & "$env:SystemRoot\System32\tar.exe" -xzf $ICU_TARBALL -C $extractDir
+     if ($LASTEXITCODE -ne 0) { throw "tar failed with exit code $LASTEXITCODE" }
+ }
+ 
+@@ -81,6 +85,7 @@ if ($Platform -eq "x64") {
+ 
+ # ClangCL for stage 2 so -march= limits codegen (MSVC /arch:SSE2 is a no-op on x64).
+ $ToolsetArg = if ($Platform -eq "x64") { @("/p:PlatformToolset=ClangCL") } else { @() }
++$MsbPlatform = if ($Platform -eq "x86") { "Win32" } else { $Platform }
+ 
+ # --- Function to patch vcxproj files for static library build with /MT ---
+ function Patch-IcuVcxProj {
+@@ -152,6 +157,20 @@ if (Test-Path $makedataMak) {
+     }
+ }
+ 
++# --- Patch testdata.mak: TESTDATATMP carries embedded quotes that the databuilder
++# invocation re-quotes (--tmp_dir ""path""), which cmd.exe cannot parse, breaking
++# the ICU 78.x data build. Drop the quotes from the macro.
++$testdataMak = Join-Path $ICU_SOURCE_DIR "test\testdata\testdata.mak"
++if (Test-Path $testdataMak) {
++    $testdataContent = Get-Content $testdataMak -Raw
++    if ($testdataContent.Contains('TESTDATATMP="$(TESTDATAOUT)\testdata"')) {
++        Write-Host ":: Patching testdata.mak to drop TESTDATATMP quotes..."
++        $testdataContent = $testdataContent.Replace('TESTDATATMP="$(TESTDATAOUT)\testdata"', 'TESTDATATMP=$(TESTDATAOUT)\testdata')
++        Set-Content $testdataMak $testdataContent -NoNewline
++        Write-Host "  Patched: testdata.mak"
++    }
++}
++
+ # --- Find MSBuild ---
+ $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+ if (-not (Test-Path $vswhere)) {
+@@ -183,14 +202,32 @@ Write-Host ":: STAGE 1: Building ICU makedata (generates ICU data)..."
+ $env:ICU_PACKAGE_MODE = "-m static"
+ Write-Host ":: ICU_PACKAGE_MODE set to: $env:ICU_PACKAGE_MODE"
+ 
++# The data tools (genrb, icupkg, ...) are built DLL-config and need the ICU
++# common/i18n DLLs at runtime, so build those first and put them on PATH.
++foreach ($tgt in @("common", "i18n")) {
++    $dllArgs = @(
++        $slnPath,
++        "/t:$tgt",
++        "/p:Configuration=$BuildType",
++        "/p:Platform=$MsbPlatform",
++        "/p:SkipUWP=true",
++        "/p:WindowsTargetPlatformVersion=10.0",
++        "/v:minimal"
++    )
++    $dllArgs += $ToolsetArg
++    & $msbuildPath $dllArgs
++    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed for $tgt (DLL) with exit code $LASTEXITCODE" }
++}
++$icuBin = Join-Path $ICU_SOURCE_DIR "bin"
++$env:PATH = "$icuBin;$env:PATH"
++
+ $buildArgs = @(
+     $slnPath,
+     "/t:makedata",
+     "/p:Configuration=$BuildType",
+-    "/p:Platform=$Platform",
++    "/p:Platform=$MsbPlatform",
+     "/p:SkipUWP=true",
+     "/p:WindowsTargetPlatformVersion=10.0",
+-    "/m",
+     "/v:normal"
+ )
+ 
+@@ -265,7 +302,7 @@ foreach ($target in @("common", "i18n")) {
+         $slnPath,
+         "/t:$target",
+         "/p:Configuration=$BuildType",
+-        "/p:Platform=$Platform",
++        "/p:Platform=$MsbPlatform",
+         "/p:SkipUWP=true",
+         "/p:WindowsTargetPlatformVersion=10.0",
+         "/m",
+@@ -332,8 +369,8 @@ if (-not (Test-Path $icuDataLibSrc)) {
+ }
+ 
+ if (Test-Path $icuDataLibSrc) {
+-    Copy-Item $icuDataLibSrc "$ICU_LIB_DIR/sicudt.lib" -Force
+-    Write-Host "  Copied: $(Split-Path -Leaf $icuDataLibSrc) -> sicudt.lib"
++    Copy-Item $icuDataLibSrc "$ICU_LIB_DIR/icudt.lib" -Force
++    Write-Host "  Copied: $(Split-Path -Leaf $icuDataLibSrc) -> icudt.lib"
+ } else {
+     Write-Host ":: WARNING: ICU data library not found. Listing generated files..."
+     Get-ChildItem -Path $OutputDir -Recurse -Filter "*.lib" | ForEach-Object {

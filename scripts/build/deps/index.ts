@@ -16,6 +16,7 @@ import { brotli } from "./brotli.ts";
 import { cares } from "./cares.ts";
 import { hdrhistogram } from "./hdrhistogram.ts";
 import { highway } from "./highway.ts";
+import { icu } from "./icu.ts";
 import { libarchive } from "./libarchive.ts";
 import { libdeflate } from "./libdeflate.ts";
 import { libjpegTurbo } from "./libjpeg-turbo.ts";
@@ -72,7 +73,9 @@ export const allDeps: readonly Dependency[] = [
   // link order doesn't apply.
   lsquic,
   // WebKit LAST in link order — WTF/JSC provide symbols that everything
-  // above might reference (via JavaScriptCore types in headers).
+  // above might reference (via JavaScriptCore types in headers). ICU must
+  // come BEFORE WebKit: WebKit's cmake reads ICU_ROOT from the icu dep.
+  icu,
   webkit,
 ];
 

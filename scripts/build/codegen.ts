@@ -356,7 +356,16 @@ function emitBunInstall(n: Ninja, cfg: Config, pkgDir: string): string {
 /**
 /** `--debug=ON` / `--debug=OFF` flag used by several scripts. */
 function debugFlag(cfg: Config): string {
-  return cfg.debug ? "--debug=ON" : "--debug=OFF";
+  // win9x embeds the bundled JS into the binary (deployed away from the build
+  // dir), and embedded constants must stay small enough for the constexpr
+  // ASCIILiteral to compile — so it gets the production (minified) bundle.
+  // Other debug builds load builtins from disk and keep the unminified dev
+  // bundle for hot-reload.
+  return cfg.debug && !cfg.embeddedModules ? "--debug=ON" : "--debug=OFF";
+}
+
+function embedModulesFlag(cfg: Config): string {
+  return cfg.embeddedModules ? "--embed-modules=ON" : "--embed-modules=OFF";
 }
 
 /**
@@ -757,7 +766,7 @@ function emitJsModules({ n, cfg, sources, o, dirStamp }: Ctx): void {
       desc: "JS modules (bundle-modules)",
       // Note: arg is BUILD_PATH (buildDir), not CODEGEN_PATH. The script
       // derives CODEGEN_DIR = join(BUILD_PATH, "codegen") internally.
-      args: shJoin(cfg, ["run", script, debugFlag(cfg), cfg.buildDir]),
+      args: shJoin(cfg, ["run", script, debugFlag(cfg), embedModulesFlag(cfg), cfg.buildDir]),
     },
   });
 

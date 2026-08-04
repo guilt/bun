@@ -1,0 +1,14 @@
+diff --git a/icu4c/source/data/makedata.mak b/data/makedata.mak
+index 47205c1..71c5d7f 100644
+--- a/icu4c/source/data/makedata.mak
++++ b/icu4c/source/data/makedata.mak
+@@ -312,8 +312,7 @@ $(COREDATA_TS):
+ 		--tool_cfg "$(CFGTOOLS)" \
+ 		--out_dir "$(ICUBLD_PKG)" \
+ 		--tmp_dir "$(ICUTMP)" \
+-		--filter_file "$(ICU_DATA_FILTER_FILE)" \
+-		$(ICU_DATA_BUILD_VERBOSE) \
++			$(ICU_DATA_BUILD_VERBOSE) \
+ 		$(ICU_DATA_BUILDTOOL_OPTS)
+ 	@echo "timestamp" > $(COREDATA_TS)
+ 

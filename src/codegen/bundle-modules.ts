@@ -22,13 +22,14 @@ import { define } from "./replacements";
 
 const BASE = path.join(import.meta.dir, "../js");
 const debug = process.argv[2] === "--debug=ON";
-const CMAKE_BUILD_ROOT = process.argv[3];
+const embedModules = process.argv[3] === "--embed-modules=ON";
+const CMAKE_BUILD_ROOT = process.argv[4];
 
 const timeString = 'Bundled "src/js" for ' + (debug ? "development" : "production");
 console.time(timeString);
 
 if (!CMAKE_BUILD_ROOT) {
-  console.error("Usage: bun bundle-modules.ts --debug=[OFF|ON] <CMAKE_WORK_DIR>");
+  console.error("Usage: bun bundle-modules.ts --debug=[OFF|ON] --embed-modules=[OFF|ON] <CMAKE_WORK_DIR>");
   process.exit(1);
 }
 
@@ -366,7 +367,7 @@ JSValue InternalModuleRegistry::createInternalModuleById(JSGlobalObject* globalO
 //
 // We cannot use ASCIILiteral's `_s` operator for the module source code because for long
 // strings it fails a constexpr assert. Instead, we do that assert in JS before we format the string
-if (!debug) {
+if (!debug || embedModules) {
   writeIfNotChanged(
     path.join(CODEGEN_DIR, "InternalModuleRegistryConstants.h"),
     `// clang-format off
