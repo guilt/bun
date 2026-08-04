@@ -419,7 +419,11 @@ impl SavedSourceMap {
             self.unlock();
             return SourceMap::ParseUrl::default();
         } else {
-            if cfg!(debug_assertions) {
+            // TaggedPtr encodes the tag in the high bits of a u64 and round-trips
+            // through `*mut c_void`; on 32-bit (win9x) that truncates the tag, so
+            // lookups always miss here. Gracefully degrade like release — a miss
+            // just reparses the source map. Keep the debug assertion on 64-bit.
+            if cfg!(debug_assertions) && cfg!(target_pointer_width = "64") {
                 panic!("Corrupt pointer tag");
             }
             self.unlock();

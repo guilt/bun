@@ -70,7 +70,14 @@ JSC::JSValue getIfPropertyExistsPrototypePollutionMitigationUnsafe(JSC::VM& vm, 
 
     if (!isDefined) {
         RETURN_IF_EXCEPTION(scope, {});
-        return JSValue::decode(JSC::JSValue::ValueDeleted);
+        // Return the `HashTableDeletedValue` sentinel (encodes to 0x4 = the
+        // Rust `PROPERTY_DOES_NOT_EXIST`). On 32-bit (JSVALUE32_64) returning
+        // `JSValue()` (empty) encoded to the Rust `ZERO`/EMPTY sentinel, which
+        // the Rust `zero_is_throw` bindings read as "an exception was thrown" —
+        // so every missing-property read crashed with
+        // "Expected an exception to be thrown". `EncodedJSValue` is an int64,
+        // so decoding the raw 0x4 works on both JSVALUE64 and JSVALUE32_64.
+        return JSValue::decode(static_cast<JSC::EncodedJSValue>(0x4));
     }
 
     scope.assertNoExceptionExceptTermination();
