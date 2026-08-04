@@ -50,6 +50,7 @@ import type { Config } from "../config.ts";
 import { computeCpuTargetFlags } from "../flags.ts";
 import { slash } from "../shell.ts";
 import { type Dependency, type NestedCmakeBuild, type Source, depBuildDir, depSourceDir } from "../source.ts";
+import { icuRootDir } from "./icu.ts";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Prebuilt URL computation
@@ -132,41 +133,6 @@ function bmallocLib(cfg: Config): string {
  * Local mode: system ICU on posix (linked via -licu* in bun.ts); built from
  * source on Windows (see icuDir/icuLibs).
  */
-function prebuiltIcuLibs(cfg: Config): string[] {
-  if (cfg.windows) {
-    const d = cfg.debug ? "d" : "";
-    return [`lib/sicudt${d}.lib`, `lib/sicuin${d}.lib`, `lib/sicuuc${d}.lib`];
-  }
-  if (cfg.linux || cfg.freebsd) {
-    return ["lib/libicudata.a", "lib/libicui18n.a", "lib/libicuuc.a"];
-  }
-  return []; // darwin: system ICU
-}
-
-// ───────────────────────────────────────────────────────────────────────────
-// Windows local mode: ICU built from source via build-icu.ps1
-//
-// No system ICU on Windows. The script (in vendor/WebKit/) downloads ICU
-// source, patches .vcxproj files for static+/MT, runs msbuild. Output goes
-// under the WebKit build dir (NOT vendor/WebKit/WebKitBuild/icu/ like the
-// old cmake did) — per-profile, so debug/release don't conflate.
-// ───────────────────────────────────────────────────────────────────────────
-
-/** Where build-icu.ps1 writes its output. Per-profile via buildDir. */
-function icuDir(cfg: Config): string {
-  return resolve(depBuildDir(cfg, "WebKit"), "icu");
-}
-
-/**
- * Libs produced by build-icu.ps1. Names are from the script's output
- * (sicudt.lib, icuin.lib, icuuc.lib) — no `d` suffix needed since the
- * per-profile dir already isolates debug/release.
- */
-function localIcuLibs(cfg: Config): string[] {
-  const dir = icuDir(cfg);
-  return [resolve(dir, "lib", "sicudt.lib"), resolve(dir, "lib", "icuin.lib"), resolve(dir, "lib", "icuuc.lib")];
-}
-
 /**
  * WebKit source dir for local mode. Defaults to vendor/WebKit; override via
  * $BUN_WEBKIT_PATH to share one clone across worktrees.
@@ -188,6 +154,21 @@ function webkitSrcDir(cfg: Config): string {
 export const webkit: Dependency = {
   name: "WebKit",
   versionMacro: "WEBKIT",
+  patches: (cfg: Config) => [
+    // ICU source is built from the release-78.3 tarball (matches the 78.3
+    // headers/ABI the prebuilt ICU uses); build-icu.ps1 still pointed at the
+    // stale 73.2 source URL.
+    "vendor-patches/WebKit/build-icu-78.patch",
+    ...(cfg.x86
+      ? [
+          "vendor-patches/WebKit/DOMWrapperWorld.h.patch",
+          "vendor-patches/WebKit/JSDOMConstructorBase.h.patch",
+          "vendor-patches/WebKit/JSDOMWrapper.h.patch",
+          "vendor-patches/WebKit/mimalloc-no-bcrypt-link.patch",
+          "vendor-patches/WebKit/mimalloc-rtlgenrandom.patch",
+        ]
+      : []),
+  ],
 
   source: cfg => {
     if (cfg.webkit === "prebuilt") {
@@ -328,6 +309,7 @@ export const webkit: Dependency = {
       ENABLE_STATIC_JSC: "ON",
       USE_THIN_ARCHIVES: "OFF",
       ENABLE_FTL_JIT: "ON",
+      ...(cfg.x86 ? { ENABLE_JIT: "OFF", ENABLE_FTL_JIT: "OFF", ENABLE_C_LOOP: "ON", OFFLINE_ASM_BACKEND: "C_LOOP", USE_MIMALLOC: "ON", USE_SYSTEM_MALLOC: "OFF", ENABLE_REMOTE_INSPECTOR: "OFF" } : {}),
       CMAKE_EXPORT_COMPILE_COMMANDS: "ON",
       USE_BUN_JSC_ADDITIONS: "ON",
       USE_BUN_EVENT_LOOP: "ON",
@@ -342,7 +324,7 @@ export const webkit: Dependency = {
 
     const spec: NestedCmakeBuild = {
       kind: "nested-cmake",
-      targets: ["jsc"],
+      targets: cfg.x86 ? ["WTF", "bmalloc", "JavaScriptCore"] : ["jsc"],
       args,
       // Release local WebKit keeps debug info so JSC crashes symbolicate.
       // LTO stays plain Release (debug info + LTO bloats significantly).
@@ -350,37 +332,33 @@ export const webkit: Dependency = {
     };
 
     if (cfg.windows) {
-      const icu = icuDir(cfg);
-      const srcDir = webkitSrcDir(cfg);
+      const icu = icuRootDir(cfg);
       // slash(): cmake -D values — see shell.ts.
       args.ICU_ROOT = slash(icu);
       args.ICU_LIBRARY = slash(resolve(icu, "lib"));
       args.ICU_INCLUDE_DIR = slash(resolve(icu, "include"));
       // U_STATIC_IMPLEMENTATION: ICU headers default to dllimport; we
       // link statically. Matches what the old cmake's SetupWebKit did.
-      args.CMAKE_C_FLAGS = `/DU_STATIC_IMPLEMENTATION ${optFlagStr}`.trim();
-      args.CMAKE_CXX_FLAGS = `/DU_STATIC_IMPLEMENTATION /clang:-fno-c++-static-destructors ${optFlagStr}`.trim();
+      // Static build defines to suppress __declspec(dllimport) in headers.
+      const staticFlags = cfg.x86
+        ? "/DSTATICALLY_LINKED_WITH_WTF=1 /DSTATICALLY_LINKED_WITH_JavaScriptCore=1 /DBUILDING_STATICALLY=1 /DBUILDING_WTF=1 /DBUILDING_JavaScriptCore=1 /DBUILDING_bmalloc=1"
+        : "";
+      const mallocFlags = cfg.x86
+        ? "/DUSE_MIMALLOC=1 /DUSE_SYSTEM_MALLOC=0 /DBUSE_LIBPAS=0 /DBUSE_SYSTEM_MALLOC=0"
+        : "";
+      // Set the target triple for clang and bypass the clang builtins check
+      // (the Win9x LLVM distribution doesn't ship 32-bit clang_rt.builtins).
+      args.CMAKE_C_COMPILER_TARGET = "i586-pc-windows-msvc";
+      args.CMAKE_CXX_COMPILER_TARGET = "i586-pc-windows-msvc";
+      args.CLANG_BUILTINS_LIBRARY = "";
+      args.CMAKE_C_FLAGS = `/DU_STATIC_IMPLEMENTATION ${staticFlags} ${mallocFlags} ${optFlagStr}`.trim();
+      args.CMAKE_CXX_FLAGS = `/DU_STATIC_IMPLEMENTATION ${staticFlags} ${mallocFlags} /clang:-fno-c++-static-destructors ${optFlagStr}`.trim();
       // Static CRT to match bun + all other deps (we build everything
       // with /MTd or /MT). Without this, cmake defaults to /MDd →
       // RuntimeLibrary mismatch at link.
       args.CMAKE_MSVC_RUNTIME_LIBRARY = cfg.debug ? "MultiThreadedDebug" : "MultiThreaded";
-      spec.preBuild = {
-        command: [
-          "powershell",
-          "-ExecutionPolicy",
-          "Bypass",
-          "-File",
-          resolve(srcDir, "build-icu.ps1"),
-          "-Platform",
-          cfg.x64 ? "x64" : "ARM64",
-          "-BuildType",
-          cfg.debug ? "Debug" : "Release",
-          "-OutputDir",
-          icu,
-        ],
-        cwd: srcDir,
-        outputs: localIcuLibs(cfg),
-      };
+      // ICU is its own dependency (deps/icu.ts) — prebuilt download or a
+      // local static /MT source build. WebKit only consumes it via ICU_ROOT.
     }
 
     return spec;
@@ -396,7 +374,7 @@ export const webkit: Dependency = {
       // it. If a future version drops libbmalloc.a, you'll get a clear
       // "file not found" at link time (not silent omission + cryptic
       // undefined symbols).
-      const libs = [...coreLibs(cfg), ...prebuiltIcuLibs(cfg), bmallocLib(cfg)];
+      const libs = [...coreLibs(cfg), bmallocLib(cfg)];
 
       const includes = ["include"];
       // Linux/windows: ICU headers under wtf/unicode. macOS: deleted by
@@ -415,11 +393,10 @@ export const webkit: Dependency = {
     // libSubdir — we set none, so it's buildDir root. But WebKit's libs are
     // in lib/. So include the lib/ prefix.
     //
-    // Windows ICU libs are NOT listed here — they're preBuild.outputs,
-    // which source.ts appends to the resolved libs automatically. Listing
-    // them here would make dep_build also claim to produce them (dup error).
-    // Posix uses system ICU (linked via -licu* in bun.ts). Android has no
-    // system ICU — link the static cross-built libs from BUN_ANDROID_ICU_ROOT.
+    // Windows ICU is its own dependency (deps/icu.ts) — its libs come from
+    // that dep's provides, not WebKit's. Posix uses system ICU (linked via
+    // -licu* in bun.ts). Android has no system ICU — link the static
+    // cross-built libs from BUN_ANDROID_ICU_ROOT.
     const libs = [...coreLibs(cfg), bmallocLib(cfg)];
     if (cfg.abi === "android") {
       const icuRoot = process.env.BUN_ANDROID_ICU_ROOT ?? "/tmp/icu-android";
@@ -440,8 +417,7 @@ export const webkit: Dependency = {
       resolve(buildDir, "WTF", "Headers"),
       resolve(buildDir, "JavaScriptCore", "PrivateHeaders", "JavaScriptCore"),
     ];
-    // Windows: ICU headers from preBuild output.
-    if (cfg.windows) includes.push(resolve(icuDir(cfg), "include"));
+    // Windows ICU headers come from the icu dep's provides (deps/icu.ts).
     // Android: ICU headers from BUN_ANDROID_ICU_ROOT (the NDK sysroot's
     // unicode/ headers are __INTRODUCED_IN(31)-gated and unusable at API 28).
     if (cfg.abi === "android") {

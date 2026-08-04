@@ -71,7 +71,7 @@ public:
     static void subspaceFor(JSC::VM&) { RELEASE_ASSERT_NOT_REACHED(); }
 
     JSDOMGlobalObject* globalObject() const { return uncheckedDowncast<JSDOMGlobalObject>(JSC::JSNonFinalObject::globalObject()); }
-    ScriptExecutionContext* scriptExecutionContext() const { return globalObject()->scriptExecutionContext(); }
+    ::WebCore::ScriptExecutionContext* scriptExecutionContext() const { return globalObject()->scriptExecutionContext(); }
 
 protected:
     WEBCORE_EXPORT JSDOMObject(JSC::Structure*, JSC::JSGlobalObject&);

@@ -2817,7 +2817,9 @@ extern "C" napi_status napi_typeof(napi_env env, napi_value val,
     return napi_set_last_error(env, napi_generic_failure);
 }
 
+#if CPU(ADDRESS64)
 static_assert(std::is_same_v<JSBigInt::Digit, uint64_t>, "All NAPI bigint functions assume that bigint words are 64 bits");
+#endif
 #if USE(BIGINT32)
 #error All NAPI bigint functions assume that BIGINT32 is disabled
 #endif

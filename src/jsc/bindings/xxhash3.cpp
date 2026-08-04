@@ -104,12 +104,26 @@ static inline u64 Swap64(u64 x) { return __builtin_bswap64(x); }
 static inline u64 Rotl64(u64 x, int r) { return (x << r) | (x >> (64 - r)); }
 static inline u64 Xorshift64(u64 v, int shift) { return v ^ (v >> shift); }
 
-// 64x64 -> 128, fold halves. Uses the compiler's 128-bit integer.
+// 64x64 -> 128, fold halves. Uses the compiler's 128-bit integer on 64-bit;
+// on 32-bit, falls back to a software 64x64->128 multiply via 32-bit limbs.
 static inline u64 Mul128Fold64(u64 lhs, u64 rhs)
 {
+#if defined(__SIZEOF_INT128__) || defined(__int128)
     __extension__ using u128 = unsigned __int128;
     u128 const product = static_cast<u128>(lhs) * static_cast<u128>(rhs);
     return static_cast<u64>(product) ^ static_cast<u64>(product >> 64);
+#else
+    // Software 64x64->128 multiply using 32-bit limbs.
+    u32 al = static_cast<u32>(lhs), ah = static_cast<u32>(lhs >> 32);
+    u32 bl = static_cast<u32>(rhs), bh = static_cast<u32>(rhs >> 32);
+    u64 lo = static_cast<u64>(al) * bl;
+    u64 mid1 = static_cast<u64>(al) * bh;
+    u64 mid2 = static_cast<u64>(ah) * bl;
+    u64 hi = static_cast<u64>(ah) * bh;
+    u64 carry = ((lo >> 32) + static_cast<u32>(mid1) + static_cast<u32>(mid2)) >> 32;
+    u64 productHi = hi + (mid1 >> 32) + (mid2 >> 32) + carry;
+    return static_cast<u64>(lo) ^ static_cast<u64>(productHi);
+#endif
 }
 
 static inline u64 XXH64_avalanche(u64 h)

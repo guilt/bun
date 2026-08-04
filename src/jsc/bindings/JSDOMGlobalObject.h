@@ -19,13 +19,13 @@ namespace WebCore {
 Zig::GlobalObject* toJSDOMGlobalObject(ScriptExecutionContext& ctx, DOMWrapperWorld& world);
 
 template<class JSClass>
-JSClass* toJSDOMGlobalObject(JSC::VM& vm, JSC::JSValue value)
+JSClass* toJSDOMGlobalObject(::JSC::VM& vm, ::JSC::JSValue value)
 {
     // static_assert(std::is_base_of_v<JSDOMGlobalObject, JSClass>);
 
     if (auto* object = value.getObject()) {
-        if (object->type() == JSC::GlobalProxyType)
-            return dynamicDowncast<JSClass>(uncheckedDowncast<JSC::JSGlobalProxy>(object)->target());
+        if (object->type() == ::JSC::GlobalProxyType)
+            return dynamicDowncast<JSClass>(uncheckedDowncast<::JSC::JSGlobalProxy>(object)->target());
         if (object->inherits<JSClass>())
             return uncheckedDowncast<JSClass>(object);
     }

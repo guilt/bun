@@ -49,10 +49,21 @@ protected:
     // `HandleScope() = default`.
     HandleScope() = default;
 
-    // must be 24 bytes to match V8 layout
+    // Size matches V8 64-bit layout (kHandleScopeDataSize = 2*ptr + 2*int32 = 24)
+    // even on 32-bit, because the real V8 headers are for 64-bit host.
+    // Pad pointers to 8 bytes each via explicit uint32_t gaps.
     Isolate* m_isolate;
+#if !CPU(ADDRESS64)
+    uint32_t m_pad0;
+#endif
     HandleScope* m_previousHandleScope;
+#if !CPU(ADDRESS64)
+    uint32_t m_pad1;
+#endif
     shim::HandleScopeBuffer* m_buffer;
+#if !CPU(ADDRESS64)
+    uint32_t m_pad2;
+#endif
 
     // is protected in v8, which matters on windows
     BUN_EXPORT static uintptr_t* CreateHandle(internal::Isolate* isolate, uintptr_t value);

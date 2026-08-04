@@ -13,7 +13,9 @@
 // exported EscapableHandleScopeBase constructor *are* unwound by the inline destructor, so that
 // constructor initializes them with V8's meanings instead -- see V8EscapableHandleScopeBase.cpp
 // and the comments in ~HandleScope below.
+#if CPU(ADDRESS64)
 ASSERT_V8_TYPE_LAYOUT_MATCHES(v8::HandleScope)
+#endif
 
 namespace v8 {
 

@@ -31,8 +31,14 @@ class GlobalObject;
 }
 
 namespace WebCore {
-using namespace JSC;
-using namespace Zig;
+// Aliases force qualified lookups (WebCore::Xxx, JSC::Xxx, Zig::Xxx) to
+// find the global namespaces on 32-bit, where clang-cl can otherwise resolve
+// them as Bun::WebCore / Bun::JSC / Bun::Zig through transitive using-directives.
+namespace WebCore = ::WebCore;
+namespace JSC = ::JSC;
+namespace Zig = ::Zig;
+using namespace ::JSC;
+using namespace ::Zig;
 
 enum class UseCustomHeapCellType { Yes,
     No };

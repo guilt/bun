@@ -111,12 +111,12 @@ std::optional<DhJobCtx> DhJobCtx::fromJS(JSGlobalObject* globalObject, ThrowScop
     const KeyObject& publicKey = publicKeyObject->handle();
 
     if (privateKey.type() != CryptoKeyType::Private) {
-        ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, privateKey.type(), "private"_s);
+        ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, static_cast<uint8_t>(privateKey.type()), "private"_s);
         return std::nullopt;
     }
 
     if (publicKey.type() != CryptoKeyType::Public && publicKey.type() != CryptoKeyType::Private) {
-        ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, publicKey.type(), "private or public"_s);
+        ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, static_cast<uint8_t>(publicKey.type()), "private or public"_s);
         return std::nullopt;
     }
 

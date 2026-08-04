@@ -17,7 +17,7 @@ enum class AArch64CPUFeature : uint8_t {
     sve = 6,
 };
 
-#if CPU(X86_64)
+#if CPU(X86_64) || CPU(X86)
 
 #if OS(WINDOWS)
 
@@ -132,7 +132,7 @@ static uint8_t aarch64_cpu_features()
 
 extern "C" uint8_t bun_cpu_features()
 {
-#if CPU(X86_64)
+#if CPU(X86_64) || CPU(X86)
     return x86_cpu_features();
 #elif CPU(ARM64)
     return aarch64_cpu_features();

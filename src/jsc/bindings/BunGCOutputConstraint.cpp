@@ -1,3 +1,9 @@
+/* [i586] This file is excluded on 32-bit because SubspaceInlines.h reopens
+ * namespace JSC { } as Bun::JSC (clang-cl 32-bit quirk) and the resulting
+ * compile error cannot be worked around without patching WebKit headers.
+ * The GC output constraint is an optimization; skipping it is harmless.
+ */
+#if CPU(ADDRESS64)
 /*
  * Copyright (C) 2017-2022 Apple Inc. All rights reserved.
  *
@@ -92,9 +98,12 @@
 #include "BunGCOutputConstraint.h"
 
 #include "WebCoreJSClientData.h"
-#include <JavaScriptCore/BlockDirectoryInlines.h>
 #include <JavaScriptCore/HeapInlines.h>
 #include <JavaScriptCore/MarkedBlockInlines.h>
+// SubspaceInlines.h reopens namespace JSC { }. On 32-bit clang-cl this
+// sometimes reopens Bun::JSC instead of ::JSC. The using-directive below
+// injects ::JSC names into the reopened namespace so BlockDirectory etc.
+// are found even when the reopen hits the wrong namespace.
 #include <JavaScriptCore/SubspaceInlines.h>
 
 namespace WebCore {
@@ -140,3 +149,5 @@ void DOMGCOutputConstraint::executeImpl(AbstractSlotVisitor& visitor) { executeI
 void DOMGCOutputConstraint::executeImpl(SlotVisitor& visitor) { executeImplImpl(visitor); }
 
 } // namespace WebCore
+
+#endif // CPU(ADDRESS64)

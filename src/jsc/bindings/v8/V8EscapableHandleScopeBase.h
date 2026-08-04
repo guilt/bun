@@ -32,6 +32,9 @@ private:
     // escape_slot_, it is only ever touched by out-of-line (Bun-compiled) code, and doubles as
     // the "Escape called twice" flag.
     shim::HandleScopeBuffer* m_escapeBuffer;
+#if !CPU(ADDRESS64)
+    uint32_t m_pad3;
+#endif
 };
 
 } // namespace v8

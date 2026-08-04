@@ -991,11 +991,11 @@ void KeyObject::getKeyObjectFromHandle(JSGlobalObject* globalObject, ThrowScope&
 
     if (handle.type() != CryptoKeyType::Private) {
         if (mode == PrepareAsymmetricKeyMode::ConsumePrivate || mode == PrepareAsymmetricKeyMode::CreatePublic) {
-            ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, handle.type(), "private"_s);
+            ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, static_cast<uint8_t>(handle.type()), "private"_s);
             return;
         }
         if (handle.type() != CryptoKeyType::Public) {
-            ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, handle.type(), "private or public"_s);
+            ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, static_cast<uint8_t>(handle.type()), "private or public"_s);
             return;
         }
     }
@@ -1676,11 +1676,11 @@ KeyObject::PrepareAsymmetricKeyResult KeyObject::prepareAsymmetricKey(JSC::JSGlo
 
         if (keyObject.type() != CryptoKeyType::Private) {
             if (mode == PrepareAsymmetricKeyMode::ConsumePrivate || mode == PrepareAsymmetricKeyMode::CreatePublic) {
-                ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, keyObject.type(), "private"_s);
+                ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, static_cast<uint8_t>(keyObject.type()), "private"_s);
                 return;
             }
             if (keyObject.type() != CryptoKeyType::Public) {
-                ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, keyObject.type(), "private or public"_s);
+                ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, static_cast<uint8_t>(keyObject.type()), "private or public"_s);
                 return;
             }
         }
@@ -1694,11 +1694,11 @@ KeyObject::PrepareAsymmetricKeyResult KeyObject::prepareAsymmetricKey(JSC::JSGlo
 
         if (cryptoKey.type() != CryptoKeyType::Private) {
             if (mode == PrepareAsymmetricKeyMode::ConsumePrivate || mode == PrepareAsymmetricKeyMode::CreatePublic) {
-                ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, cryptoKey.type(), "private"_s);
+                ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, static_cast<uint8_t>(cryptoKey.type()), "private"_s);
                 return;
             }
             if (cryptoKey.type() != CryptoKeyType::Public) {
-                ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, cryptoKey.type(), "private or public"_s);
+                ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, static_cast<uint8_t>(cryptoKey.type()), "private or public"_s);
                 return;
             }
         }
@@ -1962,14 +1962,14 @@ KeyObject KeyObject::prepareSecretKey(JSGlobalObject* globalObject, ThrowScope& 
         if (JSKeyObject* keyObject = dynamicDowncast<JSKeyObject>(keyValue)) {
             auto& handle = keyObject->handle();
             if (handle.type() != CryptoKeyType::Secret) {
-                ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, handle.type(), "secret"_s);
+                ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, static_cast<uint8_t>(handle.type()), "secret"_s);
                 return {};
             }
             return handle;
         } else if (JSCryptoKey* cryptoKey = dynamicDowncast<JSCryptoKey>(keyValue)) {
             auto& key = cryptoKey->wrapped();
             if (key.type() != CryptoKeyType::Secret) {
-                ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, key.type(), "secret"_s);
+                ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, static_cast<uint8_t>(key.type()), "secret"_s);
                 return {};
             }
             emitCryptoKeyDeprecationWarning(globalObject);

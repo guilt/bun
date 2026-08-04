@@ -8,6 +8,12 @@
 #error "root.h must be included before any other WebCore or JavaScriptCore headers"
 #endif
 
+#ifdef __cplusplus
+namespace JSC {}
+namespace WTF {}
+
+#endif
+
 #if defined(WIN32) || defined(_WIN32)
 #define BUN_EXPORT __declspec(dllexport)
 #else
@@ -57,6 +63,7 @@
 #undef new
 #undef delete
 #include <wtf/FastMalloc.h>
+namespace Bun { namespace std = ::std; }
 #endif
 
 /* Disabling warning C4206: nonstandard extension used: translation unit is empty.
@@ -81,6 +88,7 @@
 #include <JavaScriptCore/JSCJSValue.h>
 #include <wtf/text/MakeString.h>
 #include <JavaScriptCore/JSCInlines.h>
+#include <JavaScriptCore/TypedArrayController.h>
 #include <JavaScriptCore/HandleSet.h>
 #include <wtf/Ref.h>
 #include <wtf/ThreadSafeRefCounted.h>
@@ -97,6 +105,29 @@
 #define BUN_DECLARE_HOST_FUNCTION(name) extern "C" JSC_DECLARE_HOST_FUNCTION(name)
 #define BUN_DEFINE_HOST_FUNCTION(name, args) extern "C" JSC_DEFINE_HOST_FUNCTION(name, args)
 #endif
+
+// Fix EXCEPTION_SCOPE_POSITION_FOR_ASAN: use -> instead of . so it works
+// when vm__ is Ref<VM> (which .currentCLoopStackPointer fails on in 32-bit).
+// Guard with ENABLE(C_LOOP) since prebuilt WebKit may not have C Loop enabled.
+#if ENABLE(C_LOOP)
+#undef EXCEPTION_SCOPE_POSITION_FOR_ASAN
+// NOTE: original macro is (vm__).currentCLoopStackPointer(). On 32-bit
+// clang, when vm__ is Ref<VM>, the implicit conversion to VM& fails.
+// The call sites should dereference Ref<VM> before passing to the macro.
+#define EXCEPTION_SCOPE_POSITION_FOR_ASAN(vm__) (vm__).currentCLoopStackPointer()
+#endif
+
+// Override JSC_HOST_CALL macros to use ::JSC:: so they work inside
+// namespace Bun/WebCore without resolving to Bun::JSC:: on i586 32-bit.
+#undef JSC_DECLARE_HOST_FUNCTION
+#define JSC_DECLARE_HOST_FUNCTION(functionName) \
+    ::JSC::EncodedJSValue JSC_HOST_CALL_ATTRIBUTES functionName(::JSC::JSGlobalObject*, ::JSC::CallFrame*)
+#undef JSC_DEFINE_HOST_FUNCTION
+#define JSC_DEFINE_HOST_FUNCTION(functionName, parameters) \
+    JSC_DEFINE_HOST_FUNCTION_WITH_ATTRIBUTES(functionName, , parameters)
+#undef JSC_DEFINE_HOST_FUNCTION_WITH_ATTRIBUTES
+#define JSC_DEFINE_HOST_FUNCTION_WITH_ATTRIBUTES(functionName, attributes, parameters) \
+    attributes ::JSC::EncodedJSValue JSC_HOST_CALL_ATTRIBUTES functionName parameters
 
 // can be nothrow | zero_is_throw | check_slow
 #define ZIG_EXPORT(...)

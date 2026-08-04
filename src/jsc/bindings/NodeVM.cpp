@@ -920,7 +920,11 @@ JSC_DEFINE_HOST_FUNCTION(jsNodeVmWasmDisallowed, (JSC::JSGlobalObject * globalOb
 {
     VM& vm = globalObject->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
+#if ENABLE(WEBASSEMBLY)
     scope.throwException(globalObject, JSC::createJSWebAssemblyCompileError(globalObject, vm, "Wasm code generation disallowed by embedder"_s));
+#else
+    scope.throwException(globalObject, JSC::createTypeError(globalObject, "WebAssembly is not available"_s));
+#endif
     return {};
 }
 
@@ -930,7 +934,11 @@ JSC_DEFINE_HOST_FUNCTION(jsNodeVmWasmCompileDisallowed, (JSC::JSGlobalObject * g
 {
     VM& vm = globalObject->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
+#if ENABLE(WEBASSEMBLY)
     JSObject* error = JSC::createJSWebAssemblyCompileError(globalObject, vm, "Wasm code generation disallowed by embedder"_s);
+#else
+    JSObject* error = JSC::createTypeError(globalObject, "WebAssembly is not available"_s);
+#endif
     RETURN_IF_EXCEPTION(scope, {});
     RELEASE_AND_RETURN(scope, JSValue::encode(JSC::JSPromise::rejectedPromise(globalObject, error)));
 }

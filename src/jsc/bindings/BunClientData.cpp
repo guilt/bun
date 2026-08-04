@@ -10,7 +10,12 @@
 #include <JavaScriptCore/IsoHeapCellType.h>
 #include <JavaScriptCore/JSDestructibleObjectHeapCellType.h>
 // #include <JavaScriptCore/MarkingConstraint.h>
+// SubspaceInlines.h hits a clang-cl 32‑bit namespace bug (Bun::JSC vs ::JSC).
+// The inline functions are only called from BunGCOutputConstraint.cpp (skipped
+// on 32‑bit); the linker resolves them from JavaScriptCore.lib.
+#if CPU(ADDRESS64)
 #include <JavaScriptCore/SubspaceInlines.h>
+#endif
 #include <JavaScriptCore/VM.h>
 #include <wtf/MainThread.h>
 
@@ -120,7 +125,9 @@ void JSVMClientData::create(VM* vm, void* bunVM)
     vm->clientData = clientData; // ~VM deletes this pointer.
     clientData->m_normalWorld = DOMWrapperWorld::create(*vm, DOMWrapperWorld::Type::Normal);
 
+#if CPU(ADDRESS64)
     vm->heap.addMarkingConstraint(makeUnique<WebCore::DOMGCOutputConstraint>(*vm, clientData->heapData()));
+#endif
     vm->m_typedArrayController = adoptRef(new WebCoreTypedArrayController(true));
     clientData->builtinFunctions().exportNames();
 }

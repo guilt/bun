@@ -271,7 +271,11 @@ void JSPerformance::finishCreation(VM& vm)
     static const JSC::DOMJIT::Signature DOMJITSignatureForPerformanceNow(
         functionPerformanceNowWithoutTypeCheck,
         JSPerformance::info(),
+#if ENABLE(DFG_JIT)
         JSC::DOMJIT::Effect::forWriteKinds(DFG::AbstractHeapKind::SideState),
+#else
+        JSC::DOMJIT::Effect::forRead(JSC::DOMJIT::HeapRange::top()), // safe fallback when DFG is disabled
+#endif
         SpecDoubleReal);
 
     JSFunction* now = JSFunction::create(

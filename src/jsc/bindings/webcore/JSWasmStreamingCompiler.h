@@ -4,6 +4,7 @@
 #include "JavaScriptCore/WasmStreamingCompiler.h"
 #include <wtf/NeverDestroyed.h>
 
+#if ENABLE(WEBASSEMBLY)
 namespace WebCore {
 
 class JSWasmStreamingCompiler : public JSDOMWrapper<JSC::Wasm::StreamingCompiler> {
@@ -71,3 +72,4 @@ template<> struct JSDOMWrapperConverterTraits<JSC::Wasm::StreamingCompiler> {
 };
 
 } // namespace WebCore
+#endif

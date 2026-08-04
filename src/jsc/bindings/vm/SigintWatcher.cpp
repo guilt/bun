@@ -11,7 +11,7 @@ extern "C" void Bun__ensureSignalHandler();
 namespace Bun {
 
 #if OS(WINDOWS)
-static BOOL WindowsCtrlHandler(DWORD signal)
+static BOOL WINAPI WindowsCtrlHandler(DWORD signal)
 {
     if (signal == CTRL_C_EVENT) {
         SigintWatcher::get().signalReceived();

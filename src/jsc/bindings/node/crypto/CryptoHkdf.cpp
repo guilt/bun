@@ -136,7 +136,7 @@ KeyObject prepareKey(JSGlobalObject* globalObject, ThrowScope& scope, JSValue ke
     if (JSKeyObject* keyObject = dynamicDowncast<JSKeyObject>(key)) {
         auto& handle = keyObject->handle();
         if (handle.type() != CryptoKeyType::Secret) {
-            ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, handle.type(), "secret"_s);
+            ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, static_cast<uint8_t>(handle.type()), "secret"_s);
             return {};
         }
         return handle;

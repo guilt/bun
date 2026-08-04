@@ -3,8 +3,15 @@
 
 static_assert(offsetof(v8::shim::Map, m_metaMap) == real_v8::internal::Internals::kHeapObjectMapOffset,
     "v8::Map map pointer is at wrong offset");
+// kMapInstanceTypeOffset varies: 12 on 64-bit, 8 on 32-bit
+// (kApiTaggedSize + kApiInt32Size). Our Map is padded to 64-bit layout
+// on both architectures so external addons compiled for 64-bit see the
+// correct layout. The real_v8 headers reflect the build-time arch, so
+// skip this check when cross-compiling for 32-bit on a 64-bit host.
+#if CPU(ADDRESS64)
 static_assert(offsetof(v8::shim::Map, m_instanceType) == real_v8::internal::Internals::kMapInstanceTypeOffset,
     "v8::Map instance type is at wrong offset");
+#endif
 
 static_assert((int)v8::shim::InstanceType::String < real_v8::internal::Internals::kFirstNonstringType,
     "String instance type is not a string");

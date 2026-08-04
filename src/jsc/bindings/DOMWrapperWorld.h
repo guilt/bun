@@ -27,33 +27,33 @@
 
 namespace WebCore {
 
-DOMWrapperWorld& normalWorld(JSC::VM&);
-// WEBCORE_EXPORT DOMWrapperWorld& mainThreadNormalWorld();
+::WebCore::DOMWrapperWorld& normalWorld(::JSC::VM&);
+// WEBCORE_EXPORT ::WebCore::DOMWrapperWorld& mainThreadNormalWorld();
 
-// inline DOMWrapperWorld& debuggerWorld() { return mainThreadNormalWorld(); }
-// inline DOMWrapperWorld& pluginWorld() { return mainThreadNormalWorld(); }
+// inline ::WebCore::DOMWrapperWorld& debuggerWorld() { return mainThreadNormalWorld(); }
+// inline ::WebCore::DOMWrapperWorld& pluginWorld() { return mainThreadNormalWorld(); }
 
-DOMWrapperWorld& currentWorld(JSC::JSGlobalObject&);
-DOMWrapperWorld& worldForDOMObject(JSC::JSObject&);
+::WebCore::DOMWrapperWorld& currentWorld(::JSC::JSGlobalObject&);
+::WebCore::DOMWrapperWorld& worldForDOMObject(::JSC::JSObject&);
 
 // Helper function for code paths that must not share objects across isolated DOM worlds.
-bool isWorldCompatible(JSC::JSGlobalObject&, JSC::JSValue);
+bool isWorldCompatible(::JSC::JSGlobalObject&, ::JSC::JSValue);
 
-inline DOMWrapperWorld& currentWorld(JSC::JSGlobalObject& lexicalGlobalObject);
-inline DOMWrapperWorld& worldForDOMObject(JSC::JSObject& object);
+inline ::WebCore::DOMWrapperWorld& currentWorld(::JSC::JSGlobalObject& lexicalGlobalObject);
+inline ::WebCore::DOMWrapperWorld& worldForDOMObject(::JSC::JSObject& object);
 
-inline bool isWorldCompatible(JSC::JSGlobalObject& lexicalGlobalObject, JSC::JSValue value)
+inline bool isWorldCompatible(::JSC::JSGlobalObject& lexicalGlobalObject, ::JSC::JSValue value)
 {
     return true;
     // return !value.isObject() || &worldForDOMObject(*value.getObject()) == &currentWorld(lexicalGlobalObject);
 }
 
-inline DOMWrapperWorld& currentWorld(JSC::JSGlobalObject& lexicalGlobalObject)
+inline ::WebCore::DOMWrapperWorld& currentWorld(::JSC::JSGlobalObject& lexicalGlobalObject)
 {
-    return uncheckedDowncast<Zig::GlobalObject>(&lexicalGlobalObject)->world();
+    return uncheckedDowncast<::Zig::GlobalObject>(&lexicalGlobalObject)->world();
 }
-inline DOMWrapperWorld& worldForDOMObject(JSC::JSObject& object)
+inline ::WebCore::DOMWrapperWorld& worldForDOMObject(::JSC::JSObject& object)
 {
-    return uncheckedDowncast<Zig::GlobalObject>(object.globalObject())->world();
+    return uncheckedDowncast<::Zig::GlobalObject>(object.globalObject())->world();
 };
 }

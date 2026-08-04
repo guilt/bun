@@ -185,6 +185,8 @@ static JSValue constructArch(VM& vm, JSObject* processObject)
     return JSC::jsString(vm, makeAtomString("x64"_s));
 #elif CPU(ARM64)
     return JSC::jsString(vm, makeAtomString("arm64"_s));
+#elif CPU(X86)
+    return JSC::jsString(vm, makeAtomString("x86"_s));
 #else
 #error "Unknown architecture"
 #endif
@@ -746,7 +748,9 @@ JSC_DEFINE_HOST_FUNCTION(Process_functionDlopen, (JSC::JSGlobalObject * globalOb
         .reserved = {},
     };
 
+#if CPU(ADDRESS64)
     static_assert(sizeof(napi_value) == sizeof(EncodedJSValue), "EncodedJSValue must be reinterpretable as a pointer");
+#endif
 
     auto env = globalObject->makeNapiEnv(nmodule);
     env->filename = filename_cstr;
@@ -2636,6 +2640,9 @@ static JSValue constructProcessConfigObject(VM& vm, JSObject* processObject)
 #elif CPU(ARM64)
     variables->putDirect(vm, JSC::Identifier::fromString(vm, "host_arch"_s), JSC::jsString(vm, String("arm64"_s)), 0);
     variables->putDirect(vm, JSC::Identifier::fromString(vm, "target_arch"_s), JSC::jsString(vm, String("arm64"_s)), 0);
+#elif CPU(X86)
+    variables->putDirect(vm, JSC::Identifier::fromString(vm, "host_arch"_s), JSC::jsString(vm, String("x86"_s)), 0);
+    variables->putDirect(vm, JSC::Identifier::fromString(vm, "target_arch"_s), JSC::jsString(vm, String("x86"_s)), 0);
 #else
 #error "Unsupported architecture"
 #endif

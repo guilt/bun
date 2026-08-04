@@ -3,18 +3,11 @@
 #include "ZigGlobalObject.h"
 #include "helpers.h"
 #include "BunString.h"
-#include <JavaScriptCore/SamplingProfiler.h>
 #include <JavaScriptCore/VM.h>
 #include <JavaScriptCore/JSGlobalObject.h>
-#include <JavaScriptCore/ScriptExecutable.h>
-#include <JavaScriptCore/FunctionExecutable.h>
-#include <JavaScriptCore/SourceProvider.h>
-#include <wtf/Stopwatch.h>
 #include <wtf/text/StringBuilder.h>
-#include <wtf/JSONValues.h>
 #include <wtf/HashMap.h>
 #include <wtf/HashSet.h>
-#include <wtf/URL.h>
 #include <algorithm>
 #include <limits>
 
@@ -45,13 +38,20 @@ bool isCPUProfilerRunning()
     return s_isProfilerRunning;
 }
 
+#if ENABLE(SAMPLING_PROFILER)
+
+#include <JavaScriptCore/SamplingProfiler.h>
+#include <JavaScriptCore/ScriptExecutable.h>
+#include <JavaScriptCore/FunctionExecutable.h>
+#include <JavaScriptCore/SourceProvider.h>
+#include <wtf/Stopwatch.h>
+#include <wtf/JSONValues.h>
+#include <wtf/URL.h>
+
 void startCPUProfiler(JSC::VM& vm)
 {
-    // Capture the wall clock time when profiling starts (before creating stopwatch)
-    // This will be used as the profile's startTime
     s_profilingStartTime = MonotonicTime::now().approximate<WTF::WallTime>().secondsSinceEpoch().value() * 1000000.0;
 
-    // Create a stopwatch and start it
     auto stopwatch = WTF::Stopwatch::create();
     stopwatch->start();
 
@@ -332,7 +332,7 @@ void stopCPUProfiler(JSC::VM& vm, WTF::String* outJSON, WTF::String* outText)
     for (size_t i = 0; i < stackTraces.size(); i++) {
         sortedIndices.append(i);
     }
-    std::sort(sortedIndices.begin(), sortedIndices.end(), [&stackTraces](size_t a, size_t b) {
+    std::sort(sortedIndices.begin(), sortedIndices.end(), [&stackTraces](const auto& a, const auto& b) {
         return stackTraces[a].timestamp < stackTraces[b].timestamp;
     });
 
@@ -927,6 +927,18 @@ void stopCPUProfiler(JSC::VM& vm, WTF::String* outJSON, WTF::String* outText)
         *outText = output.toString();
     }
 }
+
+#else // !ENABLE(SAMPLING_PROFILER)
+
+void Bun::startCPUProfiler(JSC::VM&) { s_isProfilerRunning = false; }
+void Bun::stopCPUProfiler(JSC::VM&, WTF::String* outJSON, WTF::String* outText)
+{
+    s_isProfilerRunning = false;
+    if (outJSON) *outJSON = WTF::String();
+    if (outText) *outText = WTF::String();
+}
+
+#endif // ENABLE(SAMPLING_PROFILER)
 
 } // namespace Bun
 

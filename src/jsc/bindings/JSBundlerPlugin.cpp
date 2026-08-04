@@ -44,8 +44,14 @@ namespace Bun {
 extern "C" void CrashHandler__setInsideNativePlugin(const char* plugin_name);
 extern "C" int OnBeforeParsePlugin__isDone(void* context);
 extern "C" void OnBeforeParseResult__reset(OnBeforeParseResult* result);
+#if CPU(ADDRESS64)
 #define WRAP_BUNDLER_PLUGIN(argName) jsDoubleNumber(std::bit_cast<double>(reinterpret_cast<uintptr_t>(argName)))
 #define UNWRAP_BUNDLER_PLUGIN(callFrame) reinterpret_cast<void*>(std::bit_cast<uintptr_t>(callFrame->argument(0).asDouble()))
+#else
+// On 32-bit, uintptr_t fits in a double mantissa (52 bits) without loss.
+#define WRAP_BUNDLER_PLUGIN(argName) jsNumber(static_cast<double>(reinterpret_cast<uintptr_t>(argName)))
+#define UNWRAP_BUNDLER_PLUGIN(callFrame) reinterpret_cast<void*>(static_cast<uintptr_t>(callFrame->argument(0).asNumber()))
+#endif
 
 /// These are native callbacks to be run after their associated JS version is run
 extern "C" void JSBundlerPlugin__addError(void*, void*, JSC::EncodedJSValue, JSC::EncodedJSValue);

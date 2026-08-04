@@ -1472,11 +1472,11 @@ JSC::EncodedJSValue CRYPTO_INVALID_KEY_OBJECT_TYPE(JSC::ThrowScope& throwScope, 
     return {};
 }
 
-JSC::EncodedJSValue CRYPTO_INVALID_KEY_OBJECT_TYPE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, CryptoKeyType receivedType, ASCIILiteral expected)
+JSC::EncodedJSValue CRYPTO_INVALID_KEY_OBJECT_TYPE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, uint8_t receivedType, ASCIILiteral expected)
 {
     WTF::StringBuilder builder;
     builder.append("Invalid key object type "_s);
-    switch (receivedType) {
+    switch (static_cast<CryptoKeyType>(receivedType)) {
     case CryptoKeyType::Private:
         builder.append("private"_s);
         break;

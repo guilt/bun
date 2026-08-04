@@ -26,6 +26,7 @@
 #include "ErrorCode.h"
 
 namespace WebCore {
+namespace JSC = ::JSC;
 
 JSC_DECLARE_HOST_FUNCTION(callThrowTypeErrorForJSDOMConstructor);
 // Interfaces that cannot be constructed at all report "Illegal constructor" for
@@ -53,7 +54,7 @@ public:
     static JSC::GCClient::IsoSubspace* subspaceForImpl(JSC::VM&);
 
     JSDOMGlobalObject* globalObject() const { return uncheckedDowncast<JSDOMGlobalObject>(Base::globalObject()); }
-    ScriptExecutionContext* scriptExecutionContext() const { return globalObject()->scriptExecutionContext(); }
+    ::WebCore::ScriptExecutionContext* scriptExecutionContext() const { return globalObject()->scriptExecutionContext(); }
     Bun::ErrorCode errorCode() const { return m_errorCode; }
 
 protected:

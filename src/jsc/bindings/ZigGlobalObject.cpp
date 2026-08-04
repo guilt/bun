@@ -144,7 +144,9 @@
 #include "streams/JSTransformStreamDefaultController.h"
 #include "JSURLPattern.h"
 #include "JSURLSearchParams.h"
+#if ENABLE(WEBASSEMBLY)
 #include "JSWasmStreamingCompiler.h"
+#endif
 #include <JavaScriptCore/WebAssemblyCompileOptions.h>
 #include "JSWebSocket.h"
 #include "JSWorker.h"
@@ -294,10 +296,20 @@ extern "C" void JSCInitialize(const char* envp[], size_t envc, void (*onCrash)(c
         // useWasmFaultSignalHandler/FastMemory when ASAN_OPTIONS lacks
         // allow_user_segv_handler=1, so we don't force it off here.
         JSC::initialize([&] {
+#if CPU(X86_64) || CPU(ARM64)
             JSC::Options::useWasm() = true;
-            JSC::Options::useJIT() = true;
             JSC::Options::useBBQJIT() = true;
+            JSC::Options::useJIT() = true;
             JSC::Options::useConcurrentJIT() = true;
+#else
+            // WebKit forces useWasmIPInt()/useBBQJIT() off on non-x86-64/ARM64,
+            // so keep wasm coherently disabled on these platforms.
+            JSC::Options::useWasm() = false;
+            // Baseline JIT code generation (CCallHelpers::setupArguments) crashes
+            // on 32-bit x86, so run through the LLInt interpreter instead.
+            JSC::Options::useJIT() = false;
+            JSC::Options::useConcurrentJIT() = false;
+#endif
             // JSC::Options::useSigillCrashAnalyzer() = true;
             JSC::Options::useSourceProviderCache() = true;
             // JSC::Options::useUnlinkedCodeBlockJettisoning() = false;
@@ -957,8 +969,13 @@ const JSC::GlobalObjectMethodTable& GlobalObject::globalObjectMethodTable()
         &scriptExecutionStatus,
         &unsafeEvalNoop, // reportViolationForUnsafeEval
         nullptr, // defaultLanguage
+#if ENABLE(WEBASSEMBLY)
         &compileStreaming,
         &instantiateStreaming,
+#else
+        nullptr, // compileStreamingPlaceholder
+        nullptr, // instantiateStreamingPlaceholder
+#endif
         &Zig::deriveShadowRealmGlobalObject,
         &codeForEval, // codeForEval
         &canCompileStrings, // canCompileStrings
@@ -985,8 +1002,13 @@ const JSC::GlobalObjectMethodTable& EvalGlobalObject::globalObjectMethodTable()
         &scriptExecutionStatus,
         &unsafeEvalNoop, // reportViolationForUnsafeEval
         nullptr, // defaultLanguage
+#if ENABLE(WEBASSEMBLY)
         &compileStreaming,
         &instantiateStreaming,
+#else
+        nullptr, // compileStreamingPlaceholder
+        nullptr, // instantiateStreamingPlaceholder
+#endif
         &Zig::deriveShadowRealmGlobalObject,
         &codeForEval, // codeForEval
         &canCompileStrings, // canCompileStrings
@@ -1294,8 +1316,8 @@ JSC_DEFINE_HOST_FUNCTION(functionNativeMicrotaskTrampoline,
     double cellPtr = callFrame->uncheckedArgument(0).asNumber();
     double callbackPtr = callFrame->uncheckedArgument(1).asNumber();
 
-    void* cell = reinterpret_cast<void*>(std::bit_cast<uintptr_t>(cellPtr));
-    auto* callback = reinterpret_cast<MicrotaskCallback>(std::bit_cast<uintptr_t>(callbackPtr));
+    void* cell = reinterpret_cast<void*>(static_cast<uintptr_t>(std::bit_cast<uint64_t>(cellPtr)));
+    auto* callback = reinterpret_cast<MicrotaskCallback>(static_cast<uintptr_t>(std::bit_cast<uint64_t>(callbackPtr)));
     callback(cell);
     return JSValue::encode(jsUndefined());
 }
@@ -3535,7 +3557,7 @@ extern "C" void JSC__JSGlobalObject__queueMicrotaskCallback(Zig::GlobalObject* g
 
     // Do not use JSCell* here because the GC will try to visit it.
     // Use BunInvokeJobWithArguments to pass the two arguments (ptr and callback) to the trampoline function
-    JSC::QueuedTask task { nullptr, JSC::InternalMicrotask::BunInvokeJobWithArguments, 0, globalObject, function, JSValue(std::bit_cast<double>(reinterpret_cast<uintptr_t>(ptr))), JSValue(std::bit_cast<double>(reinterpret_cast<uintptr_t>(callback))) };
+    JSC::QueuedTask task { nullptr, JSC::InternalMicrotask::BunInvokeJobWithArguments, 0, globalObject, function, JSValue(std::bit_cast<double>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ptr)))), JSValue(std::bit_cast<double>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(callback)))) };
     globalObject->vm().queueMicrotask(WTF::move(task));
 }
 
@@ -3901,6 +3923,7 @@ JSC::JSValue EvalGlobalObject::moduleLoaderEvaluate(JSGlobalObject* lexicalGloba
     return result;
 }
 
+#if ENABLE(WEBASSEMBLY)
 extern "C" JSC::EncodedJSValue Zig__GlobalObject__getBodyStreamOrBytesForWasmStreaming(JSGlobalObject*, EncodedJSValue response, JSC::Wasm::StreamingCompiler* compiler);
 
 extern "C" void JSC__Wasm__StreamingCompiler__addBytes(JSC::Wasm::StreamingCompiler* compiler, const uint8_t* spanPtr, size_t spanSize)
@@ -3963,6 +3986,7 @@ void GlobalObject::instantiateStreaming(JSGlobalObject* globalObject, JSC::JSPro
 {
     handleResponseOnStreamingAction(globalObject, promise, source, JSC::Wasm::CompilerMode::FullCompile, importObject, WTF::move(compileOptions));
 }
+#endif
 
 GlobalObject::PromiseFunctions GlobalObject::promiseHandlerID(Zig::FFIFunction handler)
 {

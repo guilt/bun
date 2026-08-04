@@ -220,8 +220,13 @@ const JSC::GlobalObjectMethodTable& GlobalObject::globalObjectMethodTable()
         INHERIT_HOOK_METHOD(scriptExecutionStatus),
         INHERIT_HOOK_METHOD(reportViolationForUnsafeEval),
         INHERIT_HOOK_METHOD(defaultLanguage),
-        INHERIT_HOOK_METHOD(compileStreaming),
-        INHERIT_HOOK_METHOD(instantiateStreaming),
+#if ENABLE(WEBASSEMBLY)
+        parent.compileStreaming,
+        parent.instantiateStreaming,
+#else
+        nullptr,
+        nullptr,
+#endif
         INHERIT_HOOK_METHOD(deriveShadowRealmGlobalObject),
         INHERIT_HOOK_METHOD(codeForEval),
         INHERIT_HOOK_METHOD(canCompileStrings),

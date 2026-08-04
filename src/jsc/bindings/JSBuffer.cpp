@@ -95,7 +95,9 @@ extern "C" BunString Bun__inspect_singleline(JSC::JSGlobalObject* globalObject, 
 using namespace JSC;
 using namespace WebCore;
 
+#if CPU(ADDRESS64)
 static_assert(std::is_same_v<JSBigInt::Digit, uint64_t>, "all Buffer BigInt functions assume bigint digits are 64 bits");
+#endif
 
 JSC_DECLARE_HOST_FUNCTION(constructJSBuffer);
 JSC_DECLARE_HOST_FUNCTION(callJSBuffer);
@@ -1888,8 +1890,8 @@ static JSC::EncodedJSValue jsBufferPrototypeFunction_inspectBody(JSC::JSGlobalOb
     for (auto item : data.first(actualMax)) {
         any = true;
         result.append(' ');
-        result.append(alphabet[item / 16]);
-        result.append(alphabet[item % 16]);
+        result.append(alphabet[static_cast<size_t>(item) / 16]);
+        result.append(alphabet[static_cast<size_t>(item) % 16]);
     }
     if (data.size() > max) {
         auto remaining = data.size() - max;
@@ -2733,7 +2735,7 @@ private:
 
     void finishCreation(JSC::VM&, JSGlobalObject*, JSC::JSObject* prototype);
 
-}
+};
 
 JSC_DEFINE_HOST_FUNCTION(jsBufferConstructorFunction_isEncoding, (JSGlobalObject * lexicalGlobalObject, CallFrame* callFrame))
 {
@@ -2806,7 +2808,7 @@ JSC_DEFINE_JIT_OPERATION(jsBufferConstructorAllocWithoutTypeChecks, JSUint8Array
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     IGNORE_WARNINGS_END
     JSC::JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
-    return { allocBuffer(lexicalGlobalObject, byteLength) };
+    return static_cast<JSC::ExceptionOperationResultTag>(reinterpret_cast<uint64_t>(allocBuffer(lexicalGlobalObject, byteLength)));
 }
 
 JSC_DEFINE_JIT_OPERATION(jsBufferConstructorAllocUnsafeWithoutTypeChecks, JSUint8Array*, (JSC::JSGlobalObject * lexicalGlobalObject, void* thisValue, int byteLength))
@@ -2816,7 +2818,7 @@ JSC_DEFINE_JIT_OPERATION(jsBufferConstructorAllocUnsafeWithoutTypeChecks, JSUint
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     IGNORE_WARNINGS_END
     JSC::JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
-    return { allocBufferUnsafe(lexicalGlobalObject, byteLength) };
+    return static_cast<JSC::ExceptionOperationResultTag>(reinterpret_cast<uint64_t>(allocBufferUnsafe(lexicalGlobalObject, byteLength)));
 }
 
 JSC_DEFINE_JIT_OPERATION(jsBufferConstructorAllocUnsafeSlowWithoutTypeChecks, JSUint8Array*, (JSC::JSGlobalObject * lexicalGlobalObject, void* thisValue, int byteLength))
@@ -2826,7 +2828,7 @@ JSC_DEFINE_JIT_OPERATION(jsBufferConstructorAllocUnsafeSlowWithoutTypeChecks, JS
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     IGNORE_WARNINGS_END
     JSC::JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
-    return { allocBufferUnsafe(lexicalGlobalObject, byteLength) };
+    return static_cast<JSC::ExceptionOperationResultTag>(reinterpret_cast<uint64_t>(allocBufferUnsafe(lexicalGlobalObject, byteLength)));
 }
 
 JSC_ANNOTATE_HOST_FUNCTION(JSBufferConstructorConstruct, JSBufferConstructor::construct);

@@ -4196,7 +4196,7 @@ JSC::EncodedJSValue JSC__JSValue__createObject2(JSC::JSGlobalObject* globalObjec
     auto& vm = JSC::getVM(globalObject);
     JSC::JSObject* object = value.getObject();
     if (!object) [[unlikely]] {
-        return JSValue::encode(JSValue::decode(JSC::JSValue::ValueDeleted));
+        { JSC::EncodedJSValue v; JSC::EncodedJSValueHashTraits::constructDeletedValue(v); return v; }
     }
 
     // Since Identifier might not ref the string, we need to ensure it doesn't get deref'd until this function returns
@@ -4222,7 +4222,7 @@ JSC::EncodedJSValue JSC__JSValue__getPropertyValue(JSC::EncodedJSValue encodedVa
     auto& vm = JSC::getVM(globalObject);
     JSC::JSObject* object = value.getObject();
     if (!object) [[unlikely]] {
-        return JSValue::encode(JSValue::decode(JSC::JSValue::ValueDeleted));
+        { JSC::EncodedJSValue v; JSC::EncodedJSValueHashTraits::constructDeletedValue(v); return v; }
     }
 
     // Since Identifier might not ref the string, we need to ensure it doesn't get deref'd until this function returns
@@ -4234,7 +4234,7 @@ JSC::EncodedJSValue JSC__JSValue__getPropertyValue(JSC::EncodedJSValue encodedVa
     PropertySlot slot(object, PropertySlot::InternalMethodType::Get);
     if (!object->getPropertySlot(globalObject, property, slot)) {
         RETURN_IF_EXCEPTION(scope, {});
-        return JSValue::encode(JSValue::decode(JSC::JSValue::ValueDeleted));
+        { JSC::EncodedJSValue v; JSC::EncodedJSValueHashTraits::constructDeletedValue(v); return v; }
     }
     RETURN_IF_EXCEPTION(scope, {});
 

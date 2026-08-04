@@ -17,7 +17,11 @@ struct Oddball {
     };
 
     TaggedPointer m_map;
+#if CPU(ADDRESS64)
     uintptr_t m_unused[4];
+#else
+    uintptr_t m_unused[5];
+#endif
     TaggedPointer m_kind;
 
     Oddball(Kind kind)

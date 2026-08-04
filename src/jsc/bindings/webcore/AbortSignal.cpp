@@ -358,7 +358,7 @@ void AbortSignal::throwIfAborted(JSC::JSGlobalObject& lexicalGlobalObject)
         return;
 
     Ref vm = lexicalGlobalObject.vm();
-    auto scope = DECLARE_THROW_SCOPE(vm);
+    auto scope = DECLARE_THROW_SCOPE(vm.get());
     throwException(&lexicalGlobalObject, scope, m_reason.getValue());
 }
 

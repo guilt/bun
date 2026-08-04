@@ -12,17 +12,17 @@
 namespace Bun {
 using namespace JSC;
 
-#define BUN_COMMON_STRINGS_LAZY_PROPERTY_DEFINITION(jsName)                        \
-    this->m_commonString_##jsName.initLater(                                       \
-        [](const JSC::LazyProperty<JSGlobalObject, JSString>::Initializer& init) { \
-            auto& names = WebCore::builtinNames(init.vm);                          \
-            auto name = names.jsName##PublicName();                                \
-            init.set(jsOwnedString(init.vm, name.string()));                       \
+#define BUN_COMMON_STRINGS_LAZY_PROPERTY_DEFINITION(jsName)                             \
+    this->m_commonString_##jsName.initLater(                                            \
+        [](const ::JSC::LazyProperty<::JSC::JSGlobalObject, ::JSC::JSString>::Initializer& init) { \
+            auto& names = WebCore::builtinNames(init.vm);                               \
+            auto name = names.jsName##PublicName();                                     \
+            init.set(jsOwnedString(init.vm, name.string()));                            \
         });
 
 #define BUN_COMMON_STRINGS_LAZY_PROPERTY_DEFINITION_NOT_BUILTIN_NAMES(methodName, stringLiteral) \
     this->m_commonString_##methodName.initLater(                                                 \
-        [](const JSC::LazyProperty<JSGlobalObject, JSString>::Initializer& init) {               \
+        [](const ::JSC::LazyProperty<::JSC::JSGlobalObject, ::JSC::JSString>::Initializer& init) {               \
             init.set(jsString(init.vm, AtomString(stringLiteral##_s)));                          \
         });
 
@@ -42,8 +42,8 @@ void CommonStrings::visit(Visitor& visitor)
     BUN_COMMON_STRINGS_EACH_NAME_NOT_BUILTIN_NAMES(BUN_COMMON_STRINGS_LAZY_PROPERTY_VISITOR_NOT_BUILTIN_NAMES)
 }
 
-template void CommonStrings::visit(JSC::AbstractSlotVisitor&);
-template void CommonStrings::visit(JSC::SlotVisitor&);
+template void CommonStrings::visit(::JSC::AbstractSlotVisitor&);
+template void CommonStrings::visit(::JSC::SlotVisitor&);
 
 // Must be kept in sync with src/http_types/Method.rs
 enum class HTTPMethod : uint8_t {
@@ -86,7 +86,7 @@ enum class HTTPMethod : uint8_t {
     httpUNSUBSCRIBE = 35,
 };
 
-static JSC::JSValue toJS(Zig::GlobalObject* globalObject, HTTPMethod method)
+static ::JSC::JSValue toJS(::Zig::GlobalObject* globalObject, HTTPMethod method)
 {
 #define FOR_EACH_METHOD(method)    \
     case HTTPMethod::http##method: \
@@ -138,7 +138,7 @@ static JSC::JSValue toJS(Zig::GlobalObject* globalObject, HTTPMethod method)
 #undef FOR_EACH_METHOD
 }
 
-extern "C" JSC::EncodedJSValue Bun__HTTPMethod__toJS(HTTPMethod method, Zig::GlobalObject* globalObject)
+extern "C" ::JSC::EncodedJSValue Bun__HTTPMethod__toJS(HTTPMethod method, ::Zig::GlobalObject* globalObject)
 {
     return JSValue::encode(toJS(globalObject, method));
 }
@@ -159,7 +159,7 @@ enum class CommonStringsForZig : uint8_t {
     binaryTypeUint8Array = 12,
 };
 
-static JSC::JSValue toJS(Zig::GlobalObject* globalObject, CommonStringsForZig commonString)
+static ::JSC::JSValue toJS(::Zig::GlobalObject* globalObject, CommonStringsForZig commonString)
 {
     auto& commonStrings = globalObject->commonStrings();
     switch (commonString) {
@@ -196,7 +196,7 @@ static JSC::JSValue toJS(Zig::GlobalObject* globalObject, CommonStringsForZig co
     }
 }
 
-extern "C" JSC::EncodedJSValue Bun__CommonStringsForZig__toJS(CommonStringsForZig commonString, Zig::GlobalObject* globalObject)
+extern "C" ::JSC::EncodedJSValue Bun__CommonStringsForZig__toJS(CommonStringsForZig commonString, ::Zig::GlobalObject* globalObject)
 {
     return JSValue::encode(toJS(globalObject, commonString));
 }
@@ -211,7 +211,7 @@ enum class FetchCacheMode : uint8_t {
     OnlyIfCached = 5,
 };
 
-extern "C" JSC::EncodedJSValue Bun__FetchCacheMode__toJS(FetchCacheMode mode, Zig::GlobalObject* globalObject)
+extern "C" ::JSC::EncodedJSValue Bun__FetchCacheMode__toJS(FetchCacheMode mode, ::Zig::GlobalObject* globalObject)
 {
     auto& commonStrings = globalObject->commonStrings();
     switch (mode) {
@@ -241,7 +241,7 @@ enum class FetchRedirect : uint8_t {
     Error = 2,
 };
 
-extern "C" JSC::EncodedJSValue Bun__FetchRedirect__toJS(FetchRedirect redirect, Zig::GlobalObject* globalObject)
+extern "C" ::JSC::EncodedJSValue Bun__FetchRedirect__toJS(FetchRedirect redirect, ::Zig::GlobalObject* globalObject)
 {
     auto& commonStrings = globalObject->commonStrings();
     switch (redirect) {
@@ -266,7 +266,7 @@ enum class FetchRequestMode : uint8_t {
     Navigate = 3,
 };
 
-extern "C" JSC::EncodedJSValue Bun__FetchRequestMode__toJS(FetchRequestMode mode, Zig::GlobalObject* globalObject)
+extern "C" ::JSC::EncodedJSValue Bun__FetchRequestMode__toJS(FetchRequestMode mode, ::Zig::GlobalObject* globalObject)
 {
     auto& commonStrings = globalObject->commonStrings();
     switch (mode) {

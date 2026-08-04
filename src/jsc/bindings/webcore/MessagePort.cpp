@@ -350,7 +350,7 @@ void MessagePort::dispatchOneMessage(ScriptExecutionContext& context, MessageWit
     SetForScope dispatching { m_isDispatching, true };
 
     auto* globalObject = defaultGlobalObject(context.globalObject());
-    Ref vm = globalObject->vm();
+    auto& vm = globalObject->vm();
     auto scope = DECLARE_TOP_EXCEPTION_SCOPE(vm);
 
     if (Zig::GlobalObject::scriptExecutionStatus(globalObject, globalObject) != ScriptExecutionStatus::Running)
@@ -358,7 +358,7 @@ void MessagePort::dispatchOneMessage(ScriptExecutionContext& context, MessageWit
 
     auto ports = MessagePort::entanglePorts(context, WTF::move(message.transferredPorts));
     if (scope.exception()) [[unlikely]] {
-        RELEASE_ASSERT(vm->hasPendingTerminationException());
+        RELEASE_ASSERT(vm.hasPendingTerminationException());
         return;
     }
 

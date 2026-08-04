@@ -45,14 +45,14 @@ class ScriptExecutionContext : public CanMakeWeakPtr<ScriptExecutionContext>, pu
 #endif
 
 public:
-    ScriptExecutionContext(JSC::VM* vm, JSC::JSGlobalObject* globalObject);
-    ScriptExecutionContext(JSC::VM* vm, JSC::JSGlobalObject* globalObject, ScriptExecutionContextIdentifier identifier);
+    ScriptExecutionContext(::JSC::VM* vm, ::JSC::JSGlobalObject* globalObject);
+    ScriptExecutionContext(::JSC::VM* vm, ::JSC::JSGlobalObject* globalObject, ScriptExecutionContextIdentifier identifier);
 
     ~ScriptExecutionContext();
 
     static ScriptExecutionContextIdentifier generateIdentifier();
 
-    JSC::JSGlobalObject* jsGlobalObject()
+    ::JSC::JSGlobalObject* jsGlobalObject()
     {
         return m_globalObject;
     }
@@ -63,7 +63,7 @@ public:
     using RefCounted::deref;
     using RefCounted::ref;
 
-    const WTF::URL& url() const
+    const ::WTF::URL& url() const
     {
         return m_url;
     }
@@ -74,10 +74,10 @@ public:
     bool isDocument() { return false; }
     bool isWorkerGlobalScope() { return true; }
     bool isJSExecutionForbidden();
-    void reportException(const String& errorMessage, int lineNumber, int columnNumber, const String& sourceURL, JSC::Exception* exception, RefPtr<void*>&&, CachedScript* = nullptr, bool = false)
+    void reportException(const String& errorMessage, int lineNumber, int columnNumber, const String& sourceURL, ::JSC::Exception* exception, RefPtr<void*>&&, CachedScript* = nullptr, bool = false)
     {
     }
-    // void reportUnhandledPromiseRejection(JSC::JSGlobalObject&, JSC::JSPromise&, RefPtr<Inspector::ScriptCallStack>&&)
+    // void reportUnhandledPromiseRejection(::JSC::JSGlobalObject&, ::JSC::JSPromise&, RefPtr<Inspector::ScriptCallStack>&&)
     // {
     // }
 
@@ -94,11 +94,11 @@ public:
 #endif
 
     WEBCORE_EXPORT static bool postTaskTo(ScriptExecutionContextIdentifier identifier, Function<void(ScriptExecutionContext&)>&& task);
-    WEBCORE_EXPORT static bool postTaskTo(ScriptExecutionContextIdentifier identifier, NOESCAPE const WTF::Function<void()>& betweenLookupAndEnqueue, Function<void(ScriptExecutionContext&)>&& task);
+    WEBCORE_EXPORT static bool postTaskTo(ScriptExecutionContextIdentifier identifier, NOESCAPE const ::WTF::Function<void()>& betweenLookupAndEnqueue, Function<void(ScriptExecutionContext&)>&& task);
     WEBCORE_EXPORT static bool ensureOnContextThread(ScriptExecutionContextIdentifier, Function<void(ScriptExecutionContext&)>&& task);
     WEBCORE_EXPORT static bool ensureOnMainThread(Function<void(ScriptExecutionContext&)>&& task);
 
-    WEBCORE_EXPORT JSC::JSGlobalObject* globalObject();
+    WEBCORE_EXPORT ::JSC::JSGlobalObject* globalObject();
 
     void didCreateDestructionObserver(ContextDestructionObserver&);
     void willDestroyDestructionObserver(ContextDestructionObserver&);
@@ -123,7 +123,7 @@ public:
         });
     }
 
-    JSC::VM& vm() { return *m_vm; }
+    ::JSC::VM& vm() { return *m_vm; }
     ScriptExecutionContextIdentifier identifier() const { return m_identifier; }
 
     bool isWorker = false;
@@ -141,7 +141,7 @@ public:
     Bun::SharedEnvStore* sharedEnvStore() const { return m_sharedEnvStore.get(); }
     void setSharedEnvStore(Bun::SharedEnvStore& store) { m_sharedEnvStore = &store; }
 
-    void setGlobalObject(JSC::JSGlobalObject* globalObject)
+    void setGlobalObject(::JSC::JSGlobalObject* globalObject)
     {
         m_globalObject = globalObject;
         m_vm = &globalObject->vm();
@@ -152,9 +152,9 @@ public:
 private:
     std::atomic<bool> m_isTerminating { false };
     RefPtr<Bun::SharedEnvStore> m_sharedEnvStore;
-    JSC::VM* m_vm = nullptr;
-    JSC::JSGlobalObject* m_globalObject = nullptr;
-    WTF::URL m_url = WTF::URL();
+    ::JSC::VM* m_vm = nullptr;
+    ::JSC::JSGlobalObject* m_globalObject = nullptr;
+    ::WTF::URL m_url = ::WTF::URL();
     ScriptExecutionContextIdentifier m_identifier;
     // Snapshot of the creating thread's UID; used by isContextThread() so the
     // check stays valid after VM clientData / VMHolder are torn down on exit.
@@ -168,6 +168,6 @@ public:
 #endif
 };
 
-ScriptExecutionContext* executionContext(JSC::JSGlobalObject*);
+ScriptExecutionContext* executionContext(::JSC::JSGlobalObject*);
 
 }

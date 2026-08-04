@@ -433,6 +433,7 @@ JSC_DEFINE_HOST_FUNCTION(functionNeverInlineFunction,
 extern "C" bool Bun__mkdirp(JSC::JSGlobalObject*, const char*);
 
 JSC_DECLARE_HOST_FUNCTION(functionStartSamplingProfiler);
+#if ENABLE(SAMPLING_PROFILER)
 JSC_DEFINE_HOST_FUNCTION(functionStartSamplingProfiler,
     (JSC::JSGlobalObject * globalObject,
         JSC::CallFrame* callFrame))
@@ -470,8 +471,20 @@ JSC_DEFINE_HOST_FUNCTION(functionStartSamplingProfiler,
     samplingProfiler.start();
     return JSC::JSValue::encode(jsUndefined());
 }
+#else
+JSC_DEFINE_HOST_FUNCTION(functionStartSamplingProfiler,
+    (JSC::JSGlobalObject * globalObject,
+        JSC::CallFrame*))
+{
+    auto& vm = JSC::getVM(globalObject);
+    auto scope = DECLARE_THROW_SCOPE(vm);
+    return JSC::JSValue::encode(throwException(globalObject, scope,
+        createError(globalObject, "Sampling profiler is not available"_s)));
+}
+#endif
 
 JSC_DECLARE_HOST_FUNCTION(functionSamplingProfilerStackTraces);
+#if ENABLE(SAMPLING_PROFILER)
 JSC_DEFINE_HOST_FUNCTION(functionSamplingProfilerStackTraces,
     (JSC::JSGlobalObject * globalObject,
         JSC::CallFrame*))
@@ -490,6 +503,17 @@ JSC_DEFINE_HOST_FUNCTION(functionSamplingProfilerStackTraces,
     scope.releaseAssertNoException();
     return result;
 }
+#else
+JSC_DEFINE_HOST_FUNCTION(functionSamplingProfilerStackTraces,
+    (JSC::JSGlobalObject * globalObject,
+        JSC::CallFrame*))
+{
+    auto& vm = JSC::getVM(globalObject);
+    auto scope = DECLARE_THROW_SCOPE(vm);
+    return JSC::JSValue::encode(throwException(globalObject, scope,
+        createError(globalObject, "Sampling profiler is not available"_s)));
+}
+#endif
 
 JSC_DECLARE_HOST_FUNCTION(functionGetRandomSeed);
 JSC_DEFINE_HOST_FUNCTION(functionGetRandomSeed,
@@ -661,6 +685,7 @@ JSC_DEFINE_HOST_FUNCTION(functionSetTimeZone, (JSGlobalObject * globalObject, Ca
 
 JSC_DEFINE_HOST_FUNCTION(functionRunProfiler, (JSGlobalObject * globalObject, CallFrame* callFrame))
 {
+#if ENABLE(SAMPLING_PROFILER)
     auto& vm = JSC::getVM(globalObject);
     JSC::SamplingProfiler& samplingProfiler = vm.ensureSamplingProfiler(WTF::Stopwatch::create());
 
@@ -689,8 +714,6 @@ JSC_DEFINE_HOST_FUNCTION(functionRunProfiler, (JSGlobalObject * globalObject, Ca
         unsigned sampleInterval = sampleValue.toUInt32(globalObject);
         samplingProfiler.setTimingInterval(Seconds::fromMicroseconds(sampleInterval));
     } else {
-        // Reset to default interval (1000 microseconds) to ensure each profile()
-        // call is independent of previous calls
         samplingProfiler.setTimingInterval(Seconds::fromMicroseconds(1000));
     }
 
@@ -707,8 +730,6 @@ JSC_DEFINE_HOST_FUNCTION(functionRunProfiler, (JSGlobalObject * globalObject, Ca
 
         JSValue stackTraces = JSONParse(globalObject, samplingProfiler.stackTracesAsJSON()->toJSONString());
 
-        // Use pause() instead of shutdown() to allow the profiler to be restarted
-        // shutdown() sets m_isShutDown=true which is never reset, making the profiler unusable
         {
             auto& lock = samplingProfiler.getLock();
             WTF::Locker locker { lock };
@@ -734,7 +755,6 @@ JSC_DEFINE_HOST_FUNCTION(functionRunProfiler, (JSGlobalObject * globalObject, Ca
 
         return {};
     };
-
     JSC::CallData callData = JSC::getCallData(function);
 
     samplingProfiler.noticeCurrentThreadAsJSCExecutionThread();
@@ -773,6 +793,12 @@ JSC_DEFINE_HOST_FUNCTION(functionRunProfiler, (JSGlobalObject * globalObject, Ca
 
     JSValue result = report(vm, globalObject);
     RELEASE_AND_RETURN(throwScope, JSValue::encode(result));
+#else
+    auto& vm = JSC::getVM(globalObject);
+    auto throwScope = DECLARE_THROW_SCOPE(vm);
+    throwException(globalObject, throwScope, createError(globalObject, "Sampling profiler is not available"_s));
+    return JSC::JSValue::encode(JSValue {});
+#endif
 }
 
 JSC_DECLARE_HOST_FUNCTION(functionGenerateHeapSnapshotForDebugging);

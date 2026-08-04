@@ -9,6 +9,7 @@
 #include "wtf/Scope.h"
 
 #include "JavaScriptCore/BuiltinNames.h"
+#include "JavaScriptCore/CompilationResult.h"
 #include "JavaScriptCore/JIT.h"
 #include "JavaScriptCore/JSModuleEnvironment.h"
 #include "JavaScriptCore/JSModuleRecord.h"

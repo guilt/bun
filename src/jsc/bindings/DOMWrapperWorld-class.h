@@ -8,7 +8,7 @@ namespace WebCore {
 
 class WindowProxy;
 
-typedef HashMap<void*, JSC::Weak<JSC::JSObject>> DOMObjectWrapperMap;
+typedef HashMap<void*, ::JSC::Weak<::JSC::JSObject>> DOMObjectWrapperMap;
 
 class DOMWrapperWorld : public RefCounted<DOMWrapperWorld> {
 public:
@@ -18,7 +18,7 @@ public:
         Internal, // WebKit Internal (e.g. Media Controls)
     };
 
-    static Ref<DOMWrapperWorld> create(JSC::VM& vm, Type type = Type::Internal, const String& name = {})
+    static Ref<DOMWrapperWorld> create(::JSC::VM& vm, Type type = Type::Internal, const String& name = {})
     {
         return adoptRef(*new DOMWrapperWorld(vm, type, name));
     }
@@ -43,13 +43,13 @@ public:
 
     const String& name() const { return m_name; }
 
-    JSC::VM& vm() const { return m_vm; }
+    ::JSC::VM& vm() const { return m_vm; }
 
 protected:
-    DOMWrapperWorld(JSC::VM&, Type, const String& name);
+    DOMWrapperWorld(::JSC::VM&, Type, const String& name);
 
 private:
-    JSC::VM& m_vm;
+    ::JSC::VM& m_vm;
     UncheckedKeyHashSet<WindowProxy*> m_jsWindowProxies;
     DOMObjectWrapperMap m_wrappers;
 

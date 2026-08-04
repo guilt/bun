@@ -27,9 +27,9 @@ struct NativePromiseContextPointee {
 // onResolve calls take() to transfer ownership and the dtor becomes a no-op.
 // If the Promise is GC'd without settling, the reaction is collected, this
 // cell is collected, and the dtor releases the ref. No leak, no UAF.
-class NativePromiseContext final : public JSC::JSCell {
+class NativePromiseContext final : public ::JSC::JSCell {
 public:
-    using Base = JSC::JSCell;
+    using Base = ::JSC::JSCell;
 
     // One entry per concrete native type. The destructor switches on this to
     // call the right deref. Packed into the pointer's upper bits via
@@ -47,17 +47,17 @@ public:
         DebugHTTPSServerH3RequestContext,
     };
 
-    static NativePromiseContext* create(JSC::VM& vm, JSC::Structure* structure, void* ctx, Tag tag);
+    static NativePromiseContext* create(::JSC::VM& vm, ::JSC::Structure* structure, void* ctx, Tag tag);
 
-    static JSC::Structure* createStructure(JSC::VM& vm, JSC::JSGlobalObject* globalObject)
+    static ::JSC::Structure* createStructure(::JSC::VM& vm, ::JSC::JSGlobalObject* globalObject)
     {
-        return JSC::Structure::create(vm, globalObject, JSC::jsNull(), JSC::TypeInfo(JSC::CellType, StructureFlags), info(), 0, 0);
+        return ::JSC::Structure::create(vm, globalObject, ::JSC::jsNull(), ::JSC::TypeInfo(::JSC::CellType, StructureFlags), info(), 0, 0);
     }
 
-    template<typename, JSC::SubspaceAccess mode>
-    static JSC::GCClient::IsoSubspace* subspaceFor(JSC::VM& vm)
+    template<typename, ::JSC::SubspaceAccess mode>
+    static ::JSC::GCClient::IsoSubspace* subspaceFor(::JSC::VM& vm)
     {
-        if constexpr (mode == JSC::SubspaceAccess::Concurrently)
+        if constexpr (mode == ::JSC::SubspaceAccess::Concurrently)
             return nullptr;
         return WebCore::subspaceForImpl<NativePromiseContext, WebCore::UseCustomHeapCellType::Yes>(
             vm,
@@ -65,13 +65,13 @@ public:
             [](auto& spaces, auto&& space) { spaces.m_clientSubspaceForNativePromiseContext = std::forward<decltype(space)>(space); },
             [](auto& spaces) { return spaces.m_subspaceForNativePromiseContext.get(); },
             [](auto& spaces, auto&& space) { spaces.m_subspaceForNativePromiseContext = std::forward<decltype(space)>(space); },
-            [](auto& server) -> JSC::HeapCellType& { return server.m_heapCellTypeForNativePromiseContext; });
+            [](auto& server) -> ::JSC::HeapCellType& { return server.m_heapCellTypeForNativePromiseContext; });
     }
 
     DECLARE_INFO;
 
-    static constexpr JSC::DestructionMode needsDestruction = JSC::DestructionMode::NeedsDestruction;
-    static void destroy(JSC::JSCell* cell);
+    static constexpr ::JSC::DestructionMode needsDestruction = ::JSC::DestructionMode::NeedsDestruction;
+    static void destroy(::JSC::JSCell* cell);
 
     // Transfer ownership of the ref to the caller. After this, the dtor is a
     // no-op. Returns null if already taken.
@@ -86,7 +86,7 @@ public:
     Tag tag() const { return m_data.type(); }
 
 private:
-    NativePromiseContext(JSC::VM& vm, JSC::Structure* structure, void* ctx, Tag tag)
+    NativePromiseContext(::JSC::VM& vm, ::JSC::Structure* structure, void* ctx, Tag tag)
         : Base(vm, structure)
         , m_data(static_cast<NativePromiseContextPointee*>(ctx), tag)
     {
