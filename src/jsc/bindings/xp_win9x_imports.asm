@@ -98,6 +98,8 @@ extern _WakeAllConditionVariable@4
 extern _WakeConditionVariable@4
 extern _WaitForThreadpoolTimerCallbacks@8
 extern _inet_pton@12
+extern _GetAddrInfoW@16
+extern _FreeAddrInfoW@4
 
 section .data
 
@@ -334,6 +336,12 @@ __imp__WaitForThreadpoolTimerCallbacks@8: dd _WaitForThreadpoolTimerCallbacks@8
 
 global __imp__inet_pton@12
 __imp__inet_pton@12: dd _inet_pton@12
+
+global __imp__GetAddrInfoW@16
+__imp__GetAddrInfoW@16: dd _GetAddrInfoW@16
+
+global __imp__FreeAddrInfoW@4
+__imp__FreeAddrInfoW@4: dd _FreeAddrInfoW@4
 
 section .text
 

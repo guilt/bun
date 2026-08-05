@@ -187,21 +187,13 @@ python misctools\pe_disable_aslr.py build\debug\bun-debug.exe
 
 Re-run whenever the exe is rebuilt (ninja overwrites the header).
 
-### 5. Build XP Stub DLL
+### 5. Deploy to XP
 
 ```powershell
-# Compile the bcryptprimitives stub DLL for XP compatibility
-clang-cl /LD /MT /O1 /GS- --target=i586-pc-windows-msvc `
-  src/jsc/bindings/bcryptprimitives_stub/bcryptprimitives_stub.c `
-  /link /machine:x86 /out:build/debug/bcryptprimitives.dll advapi32.lib
-```
-
-### 6. Deploy to XP
-
-```powershell
-# Copy binary + stub DLL to target (ICU is statically linked — no ICU DLLs)
+# Copy binary to target (ICU is statically linked — no ICU DLLs; the Win8+
+# API set stubs such as ProcessPrng/RtlWaitOnAddress are compiled directly
+# into the exe via win9x_apiset_stubs.cpp, so no companion DLL is needed)
 scp build/debug/bun-debug.exe user@xp-machine:C:/Bun/
-scp build/debug/bcryptprimitives.dll user@xp-machine:C:/Bun/
 ```
 
 ## Architecture Details
@@ -250,7 +242,7 @@ CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDebug  (or MultiThreaded)
 
 ### XP/9x API Set Stubs
 
-Windows 8+ API set DLLs (`api-ms-win-core-synch-l1-2-0.dll`, `bcryptprimitives.dll`) are not available on XP. The following files provide stubs:
+Windows 8+ API set DLLs (`api-ms-win-core-synch-l1-2-0.dll`, `bcryptprimitives.dll`) are not available on XP. All their symbols are compiled directly into the exe by the following file — no companion stub DLL is needed:
 
 - **`src/jsc/bindings/win9x_apiset_stubs.cpp`** — Standalone TU (no PCH) providing:
   - `WaitOnAddress`, `WakeByAddressAll`, `WakeByAddressSingle` (synchronization)
@@ -278,6 +270,13 @@ Windows 8+ API set DLLs (`api-ms-win-core-synch-l1-2-0.dll`, `bcryptprimitives.d
     else `NtQueryObject` + `QueryDosDeviceW` emulation
   - `GetTickCount64`, `GetSystemTimePreciseAsFileTime`, `inet_pton`,
     `InitializeConditionVariable`, `CreateEventEx`, `CreateFile2`, etc.
+  - `GetAddrInfoW`/`FreeAddrInfoW` → serviced over XP's ANSI
+    `getaddrinfo`/`freeaddrinfo` (libuv imports the `*W` DNS entry points,
+    which are Vista+ and absent on XP → `0xC0000139` at load). The `__imp__`
+    data symbols in `xp_win9x_imports.asm` kill the ws2_32 IAT entries.
+  - `SHGetKnownFolderPath` → delay-loaded (SHELL32), the `dliFailGetProc` hook
+    returns the E_NOTIMPL stub. **Must** be in the `/delayload:` list: without
+    it SHELL32 was a hard IAT import and XP died at load.
 
 - **`src/jsc/bindings/xp_win9x_imports.asm`** — the import-table overrides.
   Each Vista+ import is listed as an object-level data symbol
@@ -288,11 +287,6 @@ Windows 8+ API set DLLs (`api-ms-win-core-synch-l1-2-0.dll`, `bcryptprimitives.d
   duplicating `__imp__` when only the plain `_Foo@N` is referenced). Note
   `SetThreadpoolTimer` must be emitted as `__imp__SetThreadpoolTimer@16`
   (matching libcpmtd's own `__imp__`), not the SDK's `@20`.
-
-- **`src/jsc/bindings/bcryptprimitives_stub/bcryptprimitives_stub.c`** —
-  XP-compatible replacement DLL exporting ProcessPrng, BCryptGenRandom,
-  RtlWaitOnAddress, RtlWakeAddress*, RtlExitUserProcess
-  (deployed alongside binary on XP targets)
 
 > The `__imp_` override technique: `xp_win9x_imports.asm` provides a
 > **data** symbol `__imp__Foo@N`; `xp_compat.cpp` provides the function body
@@ -439,7 +433,7 @@ from ws2_32 (available on all Windows versions) + string conversion.
 
 - **getrandom v0.4.2 (`~/.cargo/registry/...`)**: Uses `RtlGenRandom` from
   advapi32 for `target_vendor = "rust9x"` instead of `ProcessPrng` from
-  bcryptprimitives.dll.
+  bcryptprimitives.dll (which is statically stubbed in `win9x_apiset_stubs.cpp`).
 - **nightly std library (`c.rs`)**: Skips `#[link(name = "api-ms-win-core-synch-l1-2-0")]`
   and uses dynamic loading macros for `target_vendor = "rust9x"`.
 - **nightly std library (`compat.rs`)**: Exposes `compat_fn_optional!` macro
@@ -480,14 +474,16 @@ Verified working end-to-end on the host (win9x debug build):
 ### Binary Boot on XP
 
 The binary requires the following files alongside it on XP:
-- `bcryptprimitives.dll` (stub DLL, built from `bcryptprimitives_stub.c`)
 - `dbghelp.dll` (may not be on XP by default — ship a copy; use the XP copy,
   not the Win10 one — the Win10 `dbghelp.dll` imports `api-ms-win-crt-private`)
 
 ICU is statically linked (`icuuc.lib`/`icuin.lib`/`icudt.lib`, static `/MT`) so
 no `icuuc78.dll`/`icuin78.dll`/`icudt78.dll` are deployed. The built-in JS is
-embedded, so no `js/` directory is needed either. Deploy:
-`scp -O bun-debug.exe bcryptprimitives.dll <user>@KVK-Retro-PC.local:Bun/`.
+embedded, so no `js/` directory is needed either. The Win8+ API set symbols
+(`ProcessPrng`, `BCryptGenRandom`, `RtlWaitOnAddress`, `RtlWakeAddress*`,
+`RtlExitUserProcess`) are compiled into the exe by `win9x_apiset_stubs.cpp`,
+so **no companion stub DLL is required**. Deploy:
+`scp -O bun-debug.exe <user>@KVK-Retro-PC.local:Bun/`.
 
 ### Build Environment Variables
 

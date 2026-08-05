@@ -852,6 +852,159 @@ INT __stdcall inet_pton(INT Family, PCSTR pStringBuf, PVOID pAddr) {
 }
 
 // ===================================================================
+// WS2_32 -- GetAddrInfoW / FreeAddrInfoW (Vista+)
+// libuv's src/win/getaddrinfo.c imports the *W DNS entry points, but XP only
+// exports the ANSI getaddrinfo/freeaddrinfo. xp_win9x_imports.asm redirects
+// __imp__GetAddrInfoW@16 / __imp__FreeAddrInfoW@4 to these polyfills so no
+// ws2_32 IAT entry is ever created; the load-time 0xC0000139 goes away.
+// The addrinfo layouts used here match win/ws2tcpip.h exactly.
+// ===================================================================
+
+struct xp_addrinfo {
+    int ai_flags;
+    int ai_family;
+    int ai_socktype;
+    int ai_protocol;
+    size_t ai_addrlen;
+    char* ai_canonname;
+    struct sockaddr* ai_addr;
+    struct xp_addrinfo* ai_next;
+};
+
+struct xp_addrinfow {
+    int ai_flags;
+    int ai_family;
+    int ai_socktype;
+    int ai_protocol;
+    size_t ai_addrlen;
+    wchar_t* ai_canonname;
+    struct sockaddr* ai_addr;
+    struct xp_addrinfow* ai_next;
+    // Owned allocations, freed by FreeAddrInfoW below.
+    void* _name;
+    void* _addr;
+};
+
+// sockaddr is excluded by WIN32_LEAN_AND_MEAN; it is used only as an opaque
+// pointer type here, so the implicit forward declaration is sufficient.
+
+// WSAAPI / error codes may not be present under WIN32_LEAN_AND_MEAN.
+#ifndef WSAAPI
+#define WSAAPI __stdcall
+#endif
+#ifndef WSAEINVAL
+#define WSAEINVAL 10022
+#endif
+#ifndef WSA_NOT_ENOUGH_MEMORY
+#define WSA_NOT_ENOUGH_MEMORY (10055 - 101) /* EAI_MEMORY, as used by winsock */
+#endif
+#ifndef WSA_E_CANCELLED
+#define WSA_E_CANCELLED 0x2741
+#endif
+
+// ANSI versions live in ws2_32.dll on XP too (the build already imports them
+// via uSockets' bsd.c), so just declare + reuse the existing imports. These
+// match ws2tcpip.h's getaddrinfo/freeaddrinfo shapes exactly.
+extern "C" {
+int WSAAPI getaddrinfo(const char*, const char*, const struct xp_addrinfo*, struct xp_addrinfo**);
+void WSAAPI freeaddrinfo(struct xp_addrinfo*);
+void __stdcall FreeAddrInfoW(struct xp_addrinfow*);
+}
+
+extern "C" {
+
+int __stdcall GetAddrInfoW(const wchar_t* pwszNodeName,
+                           const wchar_t* pwszServiceName,
+                           const struct xp_addrinfow* hints,
+                           struct xp_addrinfow** ppResult) {
+    if (!ppResult) return WSAEINVAL;
+    *ppResult = 0;
+
+    char nodeBuf[513] = {0};
+    char servBuf[65] = {0};
+    const char* nodeA = 0;
+    const char* servA = 0;
+    if (pwszNodeName) {
+        if (0 == WideCharToMultiByte(CP_UTF8, 0, pwszNodeName, -1, nodeBuf, sizeof nodeBuf, 0, 0))
+            return WSA_E_CANCELLED; /* host names are ASCII; undecodable => unsupported */
+        nodeA = nodeBuf;
+    }
+    if (pwszServiceName) {
+        if (0 == WideCharToMultiByte(CP_UTF8, 0, pwszServiceName, -1, servBuf, sizeof servBuf, 0, 0))
+            return WSA_E_CANCELLED;
+        servA = servBuf;
+    }
+
+    struct xp_addrinfo ahints = {};
+    struct xp_addrinfo* ahintsp = 0;
+    if (hints) {
+        ahints.ai_flags = hints->ai_flags;
+        ahints.ai_family = hints->ai_family;
+        ahints.ai_socktype = hints->ai_socktype;
+        ahints.ai_protocol = hints->ai_protocol;
+        ahintsp = &ahints;
+    }
+
+    struct xp_addrinfo* ares = 0;
+    int err = getaddrinfo(nodeA, servA, ahintsp, &ares);
+    if (err) return err;
+
+    // Convert the ANSI chain into a W chain we own; FreeAddrInfoW walks it.
+    struct xp_addrinfow* tail = *ppResult;
+    struct xp_addrinfow* prev = 0;
+    struct xp_addrinfo* a = ares;
+    while (a) {
+        struct xp_addrinfow* next = 0;
+        struct xp_addrinfow* n = (struct xp_addrinfow*)malloc(sizeof *n);
+        if (!n) { freeaddrinfo(ares); FreeAddrInfoW(*ppResult); return WSA_NOT_ENOUGH_MEMORY; }
+        memset(n, 0, sizeof *n);
+        n->ai_flags = a->ai_flags;
+        n->ai_family = a->ai_family;
+        n->ai_socktype = a->ai_socktype;
+        n->ai_protocol = a->ai_protocol;
+        n->ai_addrlen = a->ai_addrlen;
+        if (a->ai_addr && a->ai_addrlen) {
+            n->_addr = malloc(a->ai_addrlen);
+            if (!n->_addr) { free(n); freeaddrinfo(ares); FreeAddrInfoW(*ppResult); return WSA_NOT_ENOUGH_MEMORY; }
+            memcpy(n->_addr, a->ai_addr, a->ai_addrlen);
+            n->ai_addr = (struct sockaddr*)n->_addr;
+        }
+        if (a->ai_canonname) {
+            int wlen = MultiByteToWideChar(CP_UTF8, 0, a->ai_canonname, -1, 0, 0);
+            if (wlen > 0) {
+                n->_name = malloc((size_t)wlen * sizeof(wchar_t));
+                if (n->_name) {
+                    MultiByteToWideChar(CP_UTF8, 0, a->ai_canonname, -1, (wchar_t*)n->_name, wlen);
+                    n->ai_canonname = (wchar_t*)n->_name;
+                }
+            }
+        }
+        if (prev) prev->ai_next = n;
+        else *ppResult = n;
+        prev = n;
+        tail = n;
+        a = a->ai_next;
+    }
+    if (tail) tail->ai_next = 0;
+
+    freeaddrinfo(ares);
+    return 0;
+}
+
+void __stdcall FreeAddrInfoW(struct xp_addrinfow* pAddrInfo) {
+    struct xp_addrinfow* cur = pAddrInfo;
+    while (cur) {
+        struct xp_addrinfow* next = cur->ai_next;
+        if (cur->_name) free(cur->_name);
+        if (cur->_addr) free(cur->_addr);
+        free(cur);
+        cur = next;
+    }
+}
+
+}
+
+// ===================================================================
 // IPHLPAPI -- 10 missing functions (Delay-loaded + hook below)
 // ===================================================================
 

@@ -1060,6 +1060,12 @@ export const linkerFlags: Flag[] = [
       "/delayload:WSOCK32.dll",
       "/delayload:ADVAPI32.dll",
       "/delayload:IPHLPAPI.dll",
+      // SHELL32 is delayed so SHGetKnownFolderPath (Vista+) never becomes a
+      // hard IAT import; without this, the release/Xp binary loads, hits
+      // STATUS_ENTRYPOINT_NOT_FOUND (0xC0000139) and dies before _tmain.
+      // The dliFailGetProc hook in xp_compat.cpp returns the stub polyfill.
+      // CommandLineToArgvW (also from SHELL32) exists on XP and loads fine.
+      "/delayload:SHELL32.dll",
       "/delayload:CRYPT32.dll",
     ],
     when: c => c.windows && c.release,
