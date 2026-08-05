@@ -287,6 +287,8 @@ export interface Config {
   mt: string | undefined;
   /** Windows-x64: nasm for BoringSSL's NASM-syntax assembly. */
   nasm: string | undefined;
+  /** Python interpreter for the win9x post-link ASLR patch. undefined outside win9x. */
+  python: string | undefined;
 
   // ─── macOS SDK (darwin only, undefined elsewhere) ───
   /** e.g. "13.0". Passed to deps as -DCMAKE_OSX_DEPLOYMENT_TARGET. */
@@ -502,6 +504,12 @@ export interface Toolchain {
    * .S files instead, so this is x64-only in practice.
    */
   nasm: string | undefined;
+  /**
+   * Python interpreter for the win9x post-link ASLR patch
+   * (misctools/pe_disable_aslr.py). Optional — only consumed when
+   * cfg.windows && cfg.x86.
+   */
+  python: string | undefined;
 }
 
 /**
@@ -1293,6 +1301,7 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
     rc: toolchain.rc,
     mt: toolchain.mt,
     nasm: toolchain.nasm,
+    python: toolchain.python,
     osxDeploymentTarget,
     osxSysroot,
     crossTarget,

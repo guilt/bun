@@ -40,7 +40,7 @@ import { writeIfChanged } from "./fs.ts";
 import type { BuildNode, Ninja } from "./ninja.ts";
 import { emitRust, linkerMapPath, rustLibPath, rustLtoLinkInputs } from "./rust.ts";
 import { quote, slash } from "./shell.ts";
-import { emitShims, machoPostlinkCommand, machoPostlinkImplicitInputs } from "./shims.ts";
+import { emitShims, emitWin9xAslr, machoPostlinkCommand, machoPostlinkImplicitInputs } from "./shims.ts";
 import { computeDepLibs, resolveDep, type ResolvedDep } from "./source.ts";
 import { streamPath } from "./stream.ts";
 import { generateUnifiedSources } from "./unified.ts";
@@ -142,6 +142,12 @@ export interface BunOutput {
   strippedExe?: string | undefined;
   /** .dSYM bundle (darwin plain release). Added to default targets so ninja builds it. */
   dsym?: string | undefined;
+  /**
+   * win9x (windows-x86) only: stamp produced after the ASLR post-link patch
+   * (misctools/pe_disable_aslr.py) runs on the final deliverable. Pulled into
+   * default targets so a fresh relink always gets re-patched.
+   */
+  win9xAslrStamp?: string | undefined;
   /** libbun.a — all C/C++ objects archived. cpp-only. */
   archive?: string;
   /** All resolved deps (full libs list). Empty in link-only (paths computed separately). */
@@ -560,6 +566,15 @@ export function emitBun(n: Ninja, cfg: Config, sources: Sources): BunOutput {
     }
   }
 
+  // win9x: disable ASLR on the DEPLOYED artifact (the stripped bun.exe for
+  // release, the linked bun-debug.exe for debug). Runs as its own edge —
+  // see emitWin9xAslr. `win9xAslrStamp` is pulled into defaults so it always
+  // runs after a relink (this is what used to be the manual `python
+  // misctools\pe_disable_aslr.py` post-build step).
+  const win9xAslrStamp = strippedExe !== undefined
+    ? emitWin9xAslr(n, cfg, strippedExe)
+    : emitWin9xAslr(n, cfg, exe);
+
   // Phony `bun` target for convenience — only when strip DIDN'T produce a
   // literal file named `bun` (which would collide with the phony). When
   // strip runs, `ninja bun` builds the actual stripped file; no phony needed.
@@ -579,7 +594,7 @@ export function emitBun(n: Ninja, cfg: Config, sources: Sources): BunOutput {
   // fall back to direct invocation.
   emitSmokeTest(n, cfg, exe, exeName);
 
-  return { exe, strippedExe, dsym, deps, codegen, rustObjects, objects: allObjects };
+  return { exe, strippedExe, dsym, win9xAslrStamp, deps, codegen, rustObjects, objects: allObjects };
 }
 
 /**
@@ -693,6 +708,9 @@ function emitLinkOnly(n: Ninja, cfg: Config): BunOutput {
     strippedExe = emitStrip(n, cfg, exe, flags.stripflags);
     if (cfg.darwin) dsym = emitDsymutil(n, cfg, exe, exeName);
   }
+  const win9xAslrStamp = strippedExe !== undefined
+    ? emitWin9xAslr(n, cfg, strippedExe)
+    : emitWin9xAslr(n, cfg, exe);
   if (strippedExe === undefined) n.phony("bun", [exe]);
   emitSmokeTest(n, cfg, exe, exeName);
 
@@ -700,6 +718,7 @@ function emitLinkOnly(n: Ninja, cfg: Config): BunOutput {
     exe,
     strippedExe,
     dsym,
+    win9xAslrStamp,
     deps: [], // no ResolvedDep — we only computed lib paths
     rustObjects,
     objects: [],
@@ -774,6 +793,9 @@ function emitRustAndLink(n: Ninja, cfg: Config, sources: Sources): BunOutput {
     strippedExe = emitStrip(n, cfg, exe, flags.stripflags);
     if (cfg.darwin) dsym = emitDsymutil(n, cfg, exe, exeName);
   }
+  const win9xAslrStamp = strippedExe !== undefined
+    ? emitWin9xAslr(n, cfg, strippedExe)
+    : emitWin9xAslr(n, cfg, exe);
   if (strippedExe === undefined) n.phony("bun", [exe]);
   emitSmokeTest(n, cfg, exe, exeName);
 
@@ -781,6 +803,7 @@ function emitRustAndLink(n: Ninja, cfg: Config, sources: Sources): BunOutput {
     exe,
     strippedExe,
     dsym,
+    win9xAslrStamp,
     deps: [lolhtmlDep],
     codegen,
     rustObjects,

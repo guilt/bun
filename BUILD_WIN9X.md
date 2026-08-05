@@ -172,20 +172,41 @@ bun run build --profile=win9x-debug --configure-only  # Generate build.ninja
 ninja -C build/debug                                    # Run the build
 ```
 
-The configure step must run inside a Visual Studio developer shell (x64). The build script auto-re-execs if `VSINSTALLDIR` is missing.
-
-### 4b. Disable ASLR before running
-
-The win9x binary is linked with ASLR (`DllCharacteristics = 0x8140`). Load with
-a fixed base for the C Loop to work reliably and to reproduce a stable debug
-address. Clear the ASLR flags and pin the 32-bit base to `0x400000`:
+Release profile — same build, produces the stripped `build\release\bun.exe`
+(LTO is off, see the profile table above). Both profiles run strip (release)
+and the ASLR post-link step as ninja edges:
 
 ```powershell
-python misctools\pe_disable_aslr.py build\debug\bun-debug.exe
-# DllCharacteristics 0x8140 -> 0x8100 ; ImageBase 0x400000
+bun run build --profile=win9x-release
 ```
 
-Re-run whenever the exe is rebuilt (ninja overwrites the header).
+The configure step must run inside a Visual Studio developer shell (x64). The build script auto-re-execs if `VSINSTALLDIR` is missing.
+
+### 4b. ASLR is disabled automatically
+
+The win9x binary is linked with ASLR (`DllCharacteristics = 0x8140`). It must
+load with a fixed base (`0x400000`) for the C Loop to work reliably and to
+reproduce a stable debug address. This is now a ninja post-link step — no
+manual invocation:
+
+- `scripts/build/shims.ts` `emitWin9xAslr()` emits a `win9x_aslr` edge that runs
+  `misctools\pe_disable_aslr.py` on the deployed artifact: the stripped
+  `build\release\bun.exe` for `win9x-release`, the linked `build\debug\bun-debug.exe`
+  for `win9x-debug`.
+- The edge writes a `.aslr` stamp (pulled into the default targets), so ninja
+  **re-patches after every relink** — no more silently-clobbered header.
+- `restat = 1` on the rule keeps it idempotent: a no-op re-run of `ninja` says
+  "no work to do".
+- Requires Python 3 on `PATH` (see Prerequisites) — configure fails loudly if
+  it's missing.
+
+Verify the header after a build:
+
+```powershell
+python misctools\pe_disable_aslr.py build\debug\bun-debug.exe  # no-op: re-patch reports already-patched values
+# or inspect with dumpbin /headers | findstr "DLL Characteristics"
+# Expect 0x8100 (ASLR flags cleared) and ImageBase 0x400000
+```
 
 ### 5. Deploy to XP
 
@@ -194,7 +215,14 @@ Re-run whenever the exe is rebuilt (ninja overwrites the header).
 # API set stubs such as ProcessPrng/RtlWaitOnAddress are compiled directly
 # into the exe via win9x_apiset_stubs.cpp, so no companion DLL is needed)
 scp build/debug/bun-debug.exe user@xp-machine:C:/Bun/
+
+# Release profile: use the stripped binary (identical to win9x-debug except
+# it has no PDB — same XP import table)
+scp build/release/bun.exe user@xp-machine:C:/Bun/
 ```
+
+Both profiles produce an XP-ready binary automatically; the only per-binary
+deployable extra is `dbghelp.dll` (see Binary Boot on XP below).
 
 ## Architecture Details
 

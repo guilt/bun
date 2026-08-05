@@ -101,7 +101,6 @@ if (process.platform === "win32") {
     "advapi32.dll",
     "api-ms-win-core-synch-l1-2-0.dll", // forwards to kernel32; OS-provided (NOT api-ms-win-crt-*)
     "bcrypt.dll",
-    "bcryptprimitives.dll",
     "crypt32.dll",
     "dbghelp.dll",
     "iphlpapi.dll",
@@ -116,6 +115,16 @@ if (process.platform === "win32") {
     "ws2_32.dll",
     "wsock32.dll",
   ]);
+
+  // bcryptprimitives.dll (the Win8+ API set behind bcrypt.dll) is legitimate
+  // on the x64 build, which links bcrypt.lib. The win9x (i586) build must NOT
+  // import it — libuv loads ProcessPrng dynamically there and bcrypt.lib is
+  // excluded from the link (scripts/build/bun.ts systemLibs) because the API
+  // set doesn't exist on XP. Guard the win9x case so a regression that
+  // re-adds bcrypt.lib fails this test instead of shipping 0xC0000139 to XP.
+  if (process.arch !== "x64") {
+    ALLOWED_DLL_IMPORTS.delete("bcryptprimitives.dll");
+  }
 
   // vcruntime140_1.dll (__CxxFrameHandler4 only) is tolerated IF delay-loaded
   // since it resolves lazily at first C++ unwind, not at process startup.

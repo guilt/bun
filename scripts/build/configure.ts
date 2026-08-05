@@ -55,6 +55,11 @@ export function resolveToolchain(targetOs?: OS): Toolchain {
   // someone might be testing a subset that doesn't need lolhtml.
   const rust = findCargo(host.os);
 
+  // python — used by the win9x post-link ASLR patch (misctools/
+  // pe_disable_aslr.py). Optional here: win9x-only, and the post-link
+  // command asserts it exists when cfg.windows && cfg.x86.
+  const python = findSystemTool(host.os === "windows" ? "python" : "python3", { required: false });
+
   // Windows: MSVC link.exe path (to prevent Git Bash's /usr/bin/link
   // shadowing). Only needed when cargo builds with the msvc target.
   const msvcLinker = host.os === "windows" ? findMsvcLinker(host.arch) : undefined;
@@ -89,6 +94,7 @@ export function resolveToolchain(targetOs?: OS): Toolchain {
     cargoHome: rust?.cargoHome,
     rustupHome: rust?.rustupHome,
     msvcLinker,
+    python,
   };
 }
 
@@ -332,6 +338,7 @@ export async function configure(input: ConfigureInput): Promise<ConfigureResult>
     const defaultTarget = output.strippedExe !== undefined ? n.rel(output.strippedExe) : "bun";
     const targets = [defaultTarget, "check"];
     if (output.dsym !== undefined) targets.push(n.rel(output.dsym));
+    if (output.win9xAslrStamp !== undefined) targets.push(n.rel(output.win9xAslrStamp));
     n.default(targets);
   }
 

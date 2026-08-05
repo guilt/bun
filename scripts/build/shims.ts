@@ -96,6 +96,75 @@ export function machoPostlinkImplicitInputs(cfg: Config): string[] {
 }
 
 /**
+ * win9x (Windows x86): the linked binary carries ASLR flags
+ * (DYNAMIC_BASE/HIGH_ENTROPY_VA) that Windows 9x/2000/XP don't support and
+ * that destabilize the C Loop's fixed-base assumption. `misctools/
+ * pe_disable_aslr.py` clears them and pins the 32-bit ImageBase to 0x400000.
+ *
+ * Used to be a manual post-build step (BUILD_WIN9X.md "4b") that silently
+ * rotted: every relink clobbered the header, and an un-patched binary failed
+ * with 0xC0000139 only on the target OS. Now a post-link edge, so both the
+ * link (debug) and strip-copy (release) rules emit an XP-ready artifact.
+ */
+export function win9xAslrScript(cfg: Config): string {
+  return resolve(cfg.cwd, "misctools", "pe_disable_aslr.py");
+}
+
+/**
+ * win9x (Windows x86): the link command runs through the stream.ts wrapper's
+ * spawnSync (no shell), so a post-link command can't be chained onto it with
+ * `&&`. Instead we emit a dedicated edge that runs the ASLR patch on the final
+ * deliverable IN PLACE and writes a stamp. restat=1 makes the in-place patch
+ * idempotent (the patch bumps `$in`'s mtime; without restat ninja would compare
+ * against a stale pre-command stamp mtime and re-run forever). The stamp is
+ * pulled into the default targets (configure.ts) so ninja always patches a
+ * fresh relink. The deliverable differs per profile: debug keeps the link
+ * output (bun-debug.exe), release uses the stripped bun.exe — caller passes
+ * whichever is deployed.
+ *
+ * Places the rule + edge. Returns the stamp path (undefined → not a win9x build).
+ */
+export function emitWin9xAslr(n: Ninja, cfg: Config, targetExe: string): string | undefined {
+  if (!(cfg.windows && cfg.x86)) return undefined;
+  if (cfg.python === undefined) {
+    throw new Error(
+      "win9x build requires python for the ASLR post-link step (misctools/pe_disable_aslr.py); " +
+        "install python and add it to PATH",
+    );
+  }
+
+  const script = win9xAslrScript(cfg);
+  const q = (p: string) => quote(p, cfg.host.os === "windows");
+  const stamp = `${targetExe}.aslr`;
+
+  // Patch in place, then materialize the stamp. `cmd /c "... && ..."` on a
+  // windows host (ninja hands commands straight to CreateProcess, which has no
+  // `&&`); plain sh on a unix host. `$in` = the exe (patched as a side effect),
+  // `$out` = the stamp that orders downstream (deploy/smoke) after the patch.
+  //
+  // restat=1: the patch rewrites `$in` as a side effect, bumping its mtime.
+  // Without restat ninja records the stamp's mtime from before the command
+  // ran, so on the next build the freshly-patched `$in` looks newer than the
+  // stale recorded stamp → the edge re-runs every time. With restat, ninja
+  // re-stats the stamp after the command; stamp mtime > exe mtime → clean.
+  n.rule("win9x_aslr", {
+    command: cfg.host.os === "windows"
+      ? `cmd /c "${q(cfg.python)} ${q(script)} $in && type nul > $out"`
+      : `${q(cfg.python)} ${q(script)} $in && touch $out`,
+    description: "disable ASLR on $in (win9x)",
+    restat: true,
+  });
+
+  n.build({
+    outputs: [stamp],
+    rule: "win9x_aslr",
+    inputs: [targetExe],
+  });
+
+  return stamp;
+}
+
+/**
  * ELF + rust-lld: rust-lang/llvm-project builds lld without LLVM_ENABLE_ZLIB,
  * so `-Wl,--compress-debug-sections=zlib` is dropped when the crosslang-LTO
  * rust-lld swap is active (flags.ts). Uncompressed DWARF makes bun-profile
