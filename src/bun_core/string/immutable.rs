@@ -1374,9 +1374,12 @@ pub fn eql_long(a_str: &[u8], b_str: &[u8], check_len: bool) -> bool {
 
     // SAFETY: a_str.len() >= b_str.len() by contract above (checked when
     // `check_len`, debug-asserted otherwise), so the word-chunked raw-pointer
-    // walk below never reads past either slice.
+    // walk below never reads past either slice. On 32-bit targets `usize` is
+    // 4 bytes wide, so chunk on the actual pointer width instead of assuming
+    // 8 (the old `len >> 3` loop + `size_of::<usize>() == 8` guard silently
+    // skipped trailing 4-byte chunks and even returned `true` without
+    // comparing anything for 4-byte strings).
     unsafe {
-        let end = b_str.as_ptr().add(len);
         let mut a = a_str.as_ptr();
         let mut b = b_str.as_ptr();
 
@@ -1384,46 +1387,36 @@ pub fn eql_long(a_str: &[u8], b_str: &[u8], check_len: bool) -> bool {
             return true;
         }
 
-        {
-            let mut dword_length = len >> 3;
-            while dword_length > 0 {
-                if a.cast::<usize>().read_unaligned() != b.cast::<usize>().read_unaligned() {
-                    return false;
-                }
-                b = b.add(core::mem::size_of::<usize>());
-                if b == end {
-                    return true;
-                }
-                a = a.add(core::mem::size_of::<usize>());
-                dword_length -= 1;
+        let word = core::mem::size_of::<usize>();
+        let mut remaining = len;
+        while remaining >= word {
+            if a.cast::<usize>().read_unaligned() != b.cast::<usize>().read_unaligned() {
+                return false;
             }
+            a = a.add(word);
+            b = b.add(word);
+            remaining -= word;
         }
 
-        if core::mem::size_of::<usize>() == 8 {
-            if (len & 4) != 0 {
-                if a.cast::<u32>().read_unaligned() != b.cast::<u32>().read_unaligned() {
-                    return false;
-                }
-                b = b.add(core::mem::size_of::<u32>());
-                if b == end {
-                    return true;
-                }
-                a = a.add(core::mem::size_of::<u32>());
+        if remaining >= 4 {
+            if a.cast::<u32>().read_unaligned() != b.cast::<u32>().read_unaligned() {
+                return false;
             }
+            a = a.add(core::mem::size_of::<u32>());
+            b = b.add(core::mem::size_of::<u32>());
+            remaining -= core::mem::size_of::<u32>();
         }
 
-        if (len & 2) != 0 {
+        if remaining >= 2 {
             if a.cast::<u16>().read_unaligned() != b.cast::<u16>().read_unaligned() {
                 return false;
             }
-            b = b.add(core::mem::size_of::<u16>());
-            if b == end {
-                return true;
-            }
             a = a.add(core::mem::size_of::<u16>());
+            b = b.add(core::mem::size_of::<u16>());
+            remaining -= core::mem::size_of::<u16>();
         }
 
-        if (len & 1) != 0 && *a != *b {
+        if remaining != 0 && *a != *b {
             return false;
         }
 

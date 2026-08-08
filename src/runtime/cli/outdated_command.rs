@@ -788,7 +788,7 @@ impl OutdatedCommand {
                     version_buf.clear();
                     write!(version_buf, "{}", current_version.fmt(string_buf))
                         .expect("OOM writing version");
-                    bun_core::pretty!("{}", version_buf);
+                    bun_core::pretty!("{}", &version_buf);
                     for _ in version_buf.len()..current_column_inside_length + COLUMN_RIGHT_PAD {
                         bun_core::pretty!(" ");
                     }
@@ -813,7 +813,7 @@ impl OutdatedCommand {
                     } else {
                         write!(version_buf, "{}", current_version.fmt(string_buf))
                             .expect("OOM writing version");
-                        bun_core::pretty!("<d>{}<r>", version_buf);
+                        bun_core::pretty!("<d>{}<r>", &version_buf);
                     }
                     let mut update_version_len = version_buf.len();
                     if update_filtered {
@@ -844,7 +844,7 @@ impl OutdatedCommand {
                     } else {
                         write!(version_buf, "{}", current_version.fmt(string_buf))
                             .expect("OOM writing version");
-                        bun_core::pretty!("<d>{}<r>", version_buf);
+                        bun_core::pretty!("<d>{}<r>", &version_buf);
                     }
                     let mut latest_version_len = version_buf.len();
                     if latest_filtered {

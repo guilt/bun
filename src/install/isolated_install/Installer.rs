@@ -939,7 +939,7 @@ impl Task {
                                                 if PackageManager::verbose_install() {
                                                     bun_core::pretty_errorln!(
                                                         "<red><b>error<r><d>:<r>Failed to hardlink package folder\n{}\n<d>From: {}<r>\n<d>  To: {}<r>\n<r>",
-                                                        err,
+                                                        &err,
                                                         bun_core::fmt::fmt_os_path(
                                                             hardlinker.src.slice(),
                                                             bun_core::fmt::PathFormatOptions {
@@ -1031,7 +1031,7 @@ impl Task {
                                                 if PackageManager::verbose_install() {
                                                     bun_core::pretty_errorln!(
                                                         "<red><b>error<r><d>:<r>Failed to copy package\n{}\n<d>From: {}<r>\n<d>  To: {}<r>\n<r>",
-                                                        err,
+                                                        &err,
                                                         bun_core::fmt::fmt_os_path(
                                                             file_copier.src_path.slice(),
                                                             bun_core::fmt::PathFormatOptions {
@@ -1348,7 +1348,7 @@ impl Task {
                                         if PackageManager::verbose_install() {
                                             bun_core::pretty_errorln!(
                                                 "<red><b>error<r><d>:<r>Failed to hardlink package\n{}\n<d>From: {}<r>\n<d>  To: {}<r>\n<r>",
-                                                err,
+                                                &err,
                                                 bstr::BStr::new(pkg_cache_dir_subpath.slice()),
                                                 bun_core::fmt::fmt_os_path(
                                                     hardlinker.dest.slice(),
@@ -1379,7 +1379,7 @@ impl Task {
                                         if PackageManager::verbose_install() {
                                             bun_core::pretty_errorln!(
                                                 "<red><b>error<r><d>:<r>Failed to open cache directory for copyfile\n{}\n<d>From: {}<r>\n<d>  To: {}<r>\n<r>",
-                                                err,
+                                                &err,
                                                 bstr::BStr::new(pkg_cache_dir_subpath.slice()),
                                                 bun_core::fmt::fmt_os_path(
                                                     dest_subpath.slice(),
@@ -1412,7 +1412,7 @@ impl Task {
                                         if PackageManager::verbose_install() {
                                             bun_core::pretty_errorln!(
                                                 "<red><b>error<r><d>:<r>Failed to copy package\n{}\n<d>From: {}<r>\n<d>  To: {}<r>\n<r>",
-                                                err,
+                                                &err,
                                                 bstr::BStr::new(pkg_cache_dir_subpath.slice()),
                                                 bun_core::fmt::fmt_os_path(
                                                     file_copier.dest_subpath.slice(),

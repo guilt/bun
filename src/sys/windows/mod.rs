@@ -4239,11 +4239,6 @@ pub use bun_windows_sys::externs::InitializeProcThreadAttributeList;
 
 pub use bun_windows_sys::externs::UpdateProcThreadAttribute;
 
-pub use bun_windows_sys::externs::IsProcessInJob;
-
-pub const EXTENDED_STARTUPINFO_PRESENT: DWORD = 0x80000;
-pub const PROC_THREAD_ATTRIBUTE_JOB_LIST: DWORD = 0x2000D;
-
 /// Handle to a Windows pseudoconsole (ConPTY).
 pub use bun_windows_sys::externs::HPCON;
 
@@ -4676,39 +4671,9 @@ pub fn spawn_watcher_child(
     procinfo: &mut PROCESS_INFORMATION,
     job: HANDLE,
 ) -> Result<(), bun_errno::SystemErrno> {
-    // https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812
-    let mut attr_size: usize = 0;
-    // SAFETY: query size with null buffer
-    unsafe {
-        let _ = externs::InitializeProcThreadAttributeList(ptr::null_mut(), 1, 0, &mut attr_size);
-    }
-    let mut p: Vec<u8> = vec![0u8; attr_size];
-    // SAFETY: p has attr_size bytes
-    if unsafe { externs::InitializeProcThreadAttributeList(p.as_mut_ptr(), 1, 0, &mut attr_size) }
-        == 0
-    {
-        return Err(bun_errno::SystemErrno::EIO);
-    }
-    let mut job_local = job;
-    // SAFETY: p initialized above; job_local valid for sizeof(HANDLE)
-    if unsafe {
-        externs::UpdateProcThreadAttribute(
-            p.as_mut_ptr(),
-            0,
-            PROC_THREAD_ATTRIBUTE_JOB_LIST as usize,
-            core::ptr::from_mut(&mut job_local).cast::<c_void>(),
-            size_of::<HANDLE>(),
-            ptr::null_mut(),
-            ptr::null_mut(),
-        )
-    } == 0
-    {
-        return Err(bun_errno::SystemErrno::EIO);
-    }
-
-    // The win32 layer exposes these as DWORD constants — assemble the raw mask.
+    // https://devblogs.microsoft.com/oldnewthing/20239209-00/?p=107812
     const CREATE_UNICODE_ENVIRONMENT: DWORD = 0x00000400;
-    let flags: DWORD = CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT;
+    let flags: DWORD = CREATE_UNICODE_ENVIRONMENT;
 
     let image_path = exe_path_w();
     let mut wbuf = bun_paths::WPathBuffer::uninit();
@@ -4757,28 +4722,25 @@ pub fn spawn_watcher_child(
     envbuf[size + WATCHER_CHILD_ENV.len() + 2] = 0;
     envbuf[size + WATCHER_CHILD_ENV.len() + 3] = 0;
 
-    let mut startupinfo = STARTUPINFOEXW {
-        StartupInfo: STARTUPINFOW {
-            cb: size_of::<STARTUPINFOEXW>() as u32,
-            lpReserved: ptr::null_mut(),
-            lpDesktop: ptr::null_mut(),
-            lpTitle: ptr::null_mut(),
-            dwX: 0,
-            dwY: 0,
-            dwXSize: 0,
-            dwYSize: 0,
-            dwXCountChars: 0,
-            dwYCountChars: 0,
-            dwFillAttribute: 0,
-            dwFlags: win32::STARTF_USESTDHANDLES,
-            wShowWindow: 0,
-            cbReserved2: 0,
-            lpReserved2: ptr::null_mut(),
-            hStdInput: bun_sys::Fd::stdin().native(),
-            hStdOutput: bun_sys::Fd::stdout().native(),
-            hStdError: bun_sys::Fd::stderr().native(),
-        },
-        lpAttributeList: p.as_mut_ptr(),
+let mut startupinfo = STARTUPINFOW {
+        cb: size_of::<STARTUPINFOW>() as u32,
+        lpReserved: ptr::null_mut(),
+        lpDesktop: ptr::null_mut(),
+        lpTitle: ptr::null_mut(),
+        dwX: 0,
+        dwY: 0,
+        dwXSize: 0,
+        dwYSize: 0,
+        dwXCountChars: 0,
+        dwYCountChars: 0,
+        dwFillAttribute: 0,
+        dwFlags: win32::STARTF_USESTDHANDLES,
+        wShowWindow: 0,
+        cbReserved2: 0,
+        lpReserved2: ptr::null_mut(),
+        hStdInput: bun_sys::Fd::stdin().native(),
+        hStdOutput: bun_sys::Fd::stdout().native(),
+        hStdError: bun_sys::Fd::stderr().native(),
     };
     // `PROCESS_INFORMATION: bun_core::ffi::Zeroable` — all-zero is a valid
     // value, so the safe `zeroed()` constructor replaces `ptr::write_bytes`.
@@ -4801,9 +4763,17 @@ pub fn spawn_watcher_child(
     if rc == 0 {
         return Err(bun_errno::SystemErrno::EIO);
     }
-    let mut is_in_job: BOOL = 0;
-    let _ = kernel32_2::IsProcessInJob(procinfo.hProcess, job, &mut is_in_job);
-    debug_assert!(is_in_job != 0);
+    // XP-safe kill-on-close: STARTUPINFOEXW + EXTENDED_STARTUPINFO_PRESENT
+    // (PROC_THREAD_ATTRIBUTE_JOB_LIST, Vista+) makes CreateProcessW fail on
+    // XP (ERROR_INVALID_PARAMETER). Assign to the job after creation instead;
+    // AssignProcessToJobObject is available since XP so the watcher is still
+    // killed when the Job Object closes.
+    // SAFETY: `job` and `procinfo.hProcess` are valid handles; failure → 0.
+    if unsafe { externs::AssignProcessToJobObject(job, procinfo.hProcess) } == 0 {
+        let _ = kernel32_2::NtClose(procinfo.hProcess);
+        let _ = kernel32_2::NtClose(procinfo.hThread);
+        return Err(bun_errno::SystemErrno::EIO);
+    }
     let _ = kernel32_2::NtClose(procinfo.hThread);
     Ok(())
 }
@@ -5110,13 +5080,6 @@ mod kernel32_2 {
         pub(super) safe fn GetConsoleMode(hConsoleHandle: HANDLE, lpMode: &mut DWORD) -> BOOL;
         pub(super) safe fn SetConsoleMode(hConsoleHandle: HANDLE, dwMode: DWORD) -> BOOL;
         pub(super) safe fn GetExitCodeProcess(hProcess: HANDLE, lpExitCode: &mut DWORD) -> BOOL;
-        // safe: by-value `HANDLE`×2; out-param is `&mut BOOL` (non-null, valid
-        // for write). Bad handle → BOOL 0 + GetLastError, never UB.
-        pub(super) safe fn IsProcessInJob(
-            hProcess: HANDLE,
-            hJob: HANDLE,
-            result: &mut BOOL,
-        ) -> BOOL;
         // safe: by-value `HANDLE`/`i64`/`DWORD`; out-param is
         // `Option<&mut i64>` (FFI-safe via the null-pointer niche →
         // ABI-identical to a nullable `PLARGE_INTEGER`). Bad handle → BOOL 0

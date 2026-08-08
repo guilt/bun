@@ -792,11 +792,24 @@ BOOL __stdcall K32QueryWorkingSet(HANDLE hProcess, PVOID pv, DWORD cb) {
     return real(hProcess, pv, cb);
 }
 
-// -- Job Objects (Vista+ SetInformationJobObject) --
+// -- Job Objects (Win2000+ SetInformationJobObject; absent on Win9x/ME) --
 
-BOOL __stdcall SetInformationJobObject(HANDLE, JOBOBJECTINFOCLASS, LPVOID, DWORD) {
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return FALSE;
+typedef BOOL (WINAPI* SetInformationJobObjectFn)(HANDLE, JOBOBJECTINFOCLASS, LPVOID, DWORD);
+
+BOOL __stdcall SetInformationJobObject(HANDLE hJob, JOBOBJECTINFOCLASS C, LPVOID p, DWORD cb) {
+    // Job Objects are Windows 2000+/WinXP; only Win9x lacks them. Prefer the
+    // real export when present so kill-on-close (test runner, watcher) works
+    // on Win9x2K/XP rather than always failing.
+    static SetInformationJobObjectFn real = 0;
+    if (!real) {
+        HMODULE mod = GetModuleHandleA("kernel32.dll");
+        if (mod) real = (SetInformationJobObjectFn)GetProcAddress(mod, "SetInformationJobObject");
+        if (!real) {
+            SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+            return FALSE;
+        }
+    }
+    return real(hJob, C, p, cb);
 }
 
 // -- Memory Resource Notifications (Vista+) --

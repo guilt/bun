@@ -2194,7 +2194,12 @@ macro_rules! __pretty_dispatch {
         args  = [];
         pool  = [$($pool:ident)*]
     ) => {
-        match ($dest, $( &($v), )*) {
+        // Bind each arg *by value* (not `&($v)`): `rust9x` miscompiles the
+        // by-reference path when a `&f64` reaches `format_args!` under the
+        // 32-bit release codegen (prints a subnormal garbage float), while the
+        // by-value path forms the float correctly. `($v)` still evaluates each
+        // argument exactly once.
+        match ($dest, $( $v, )*) {
             (__d, $($n,)*) => {
                 if $crate::output::enable_color_for(__d) {
                     $crate::output::print_to(
@@ -2216,7 +2221,7 @@ macro_rules! __pretty_dispatch {
         args  = [];
         pool  = [$($pool:ident)*]
     ) => {
-        match ($dest, $( &($v), )*) {
+        match ($dest, $( $v, )*) {
             (__d, $($n,)*) => {
                 if $crate::output::enable_color_for(__d) {
                     $crate::output::print_to(
