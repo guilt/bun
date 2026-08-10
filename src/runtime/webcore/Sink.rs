@@ -659,7 +659,10 @@ impl<T: JsSinkAbi> JSSink<T> {
         signal.clear();
         // SAFETY: `signal.ptr` was stored by `SinkSignal::<T>::init` as the
         // encoded JSValue bits (never a real Rust pointer); bitcast back.
-        let value = JSValue::from_encoded(ptr.as_ptr() as u64);
+        // On JSVALUE32_64 the encoded cell lives in the low 32 bits (the cell
+        // pointer); `from_cell` re-applies the CELL_TAG so the value survives
+        // the pointer-width round-trip (it is always a cell here).
+        let value = JSValue::from_cell(ptr.as_ptr());
         value.unprotect();
         // `${abi}__detachPtr` runs the JS `onClose` callback through the bare
         // `AsyncContextFrame::call` overload (no TopExceptionScope of its own)
@@ -688,7 +691,10 @@ impl<T: JsSinkAbi> SinkSignal<T> {
         // a raw bit-pattern.
         fn close<T: JsSinkAbi>(this: *mut c_void, _err: Option<SysError>) {
             // `this` is the JSValue bits stashed by `init`; bitcast back.
-            let cpp = JSValue::from_encoded(this as u64);
+            // The stashed value is always a cell (the sink controller); on
+            // JSVALUE32_64 the pointer round-trip drops the CELL_TAG, so
+            // rebuild it with `from_cell`.
+            let cpp = JSValue::from_cell(this);
             // `call_check_slow` satisfies the C++ ThrowScope's
             // `simulateThrow()`.
             // TODO: this should be got from a parameter / properly propagate exception upwards.
@@ -701,7 +707,7 @@ impl<T: JsSinkAbi> SinkSignal<T> {
             _a: Option<crate::webcore::BlobSizeType>,
             _o: Option<crate::webcore::BlobSizeType>,
         ) {
-            let cpp = JSValue::from_encoded(this as u64);
+            let cpp = JSValue::from_cell(this);
             // `${abi}__onReady` calls m_onPull through the bare
             // `AsyncContextFrame::call` overload (no TopExceptionScope of its
             // own); see `close` above. Same wrapper.

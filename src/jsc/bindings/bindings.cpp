@@ -2219,7 +2219,7 @@ extern "C" JSC::EncodedJSValue ZigString__toJSONObject(const ZigString* strPtr, 
         // So we need to check the length is plausibly due to a long string.
         if (strPtr->len > Bun__stringSyntheticAllocationLimit) {
             scope.throwException(globalObject, Bun::createError(globalObject, Bun::ErrorCode::ERR_STRING_TOO_LONG, "Cannot parse a JSON string longer than 2^32-1 characters"_s));
-            return {};
+            return JSC::JSValue::encode(JSC::JSValue());
         }
     }
 
@@ -2692,7 +2692,7 @@ JSC::EncodedJSValue JSC__JSGlobalObject__getCachedObject(JSC::JSGlobalObject* gl
     auto symbol = vm.privateSymbolRegistry().symbolForKey(string);
     JSC::Identifier ident = JSC::Identifier::fromUid(symbol);
     JSC::JSValue result = globalObject->getIfPropertyExists(globalObject, ident);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     return JSC::JSValue::encode(result);
 }
 
@@ -2842,7 +2842,7 @@ extern "C" JSC::EncodedJSValue Bun__JSValue__call(JSC::JSGlobalObject* globalObj
         if (asyncContextData)
             asyncContextData->putInternalField(vm, 0, restoreAsyncContext);
         throwException(globalObject, scope, createNotAFunctionError(globalObject, jsObject));
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
 
     auto result = JSC::profiledCall(globalObject, ProfilingReason::API, jsObject, callData, jsThisObject, argList);
@@ -2851,7 +2851,7 @@ extern "C" JSC::EncodedJSValue Bun__JSValue__call(JSC::JSGlobalObject* globalObj
         asyncContextData->putInternalField(vm, 0, restoreAsyncContext);
     }
 
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     return JSC::JSValue::encode(result);
 }
 
@@ -2867,9 +2867,9 @@ JSC::EncodedJSValue JSC__JSObject__getIndex(JSC::EncodedJSValue jsValue, JSC::JS
     ASSERT_NO_PENDING_EXCEPTION(globalObject);
     auto scope = DECLARE_THROW_SCOPE(getVM(globalObject));
     auto* object = JSC::JSValue::decode(jsValue).toObject(globalObject);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     auto value = object->getIndex(globalObject, index);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     return JSC::JSValue::encode(value);
 }
 
@@ -3028,13 +3028,13 @@ JSC::EncodedJSValue JSC__JSValue__fromEntries(JSC::JSGlobalObject* globalObject,
             object->putDirect(
                 vm, JSC::PropertyName(JSC::Identifier::fromString(vm, Zig::toString(keys[i]))),
                 Zig::toJSStringGC(values[i], globalObject), 0);
-            RETURN_IF_EXCEPTION(scope, {});
+            RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
         }
     } else {
         for (size_t i = 0; i < initialCapacity; ++i) {
             object->putDirect(vm, JSC::PropertyName(Zig::toIdentifier(keys[i], globalObject)),
                 Zig::toJSStringGC(values[i], globalObject), 0);
-            RETURN_IF_EXCEPTION(scope, {});
+            RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
         }
     }
 
@@ -3048,7 +3048,7 @@ JSC::EncodedJSValue JSC__JSValue__keys(JSC::JSGlobalObject* globalObject, JSC::E
     auto scope = DECLARE_THROW_SCOPE(vm);
 
     JSC::JSObject* object = JSC::JSValue::decode(objectValue).toObject(globalObject);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     RELEASE_AND_RETURN(scope, JSValue::encode(ownPropertyKeys(globalObject, object, PropertyNameMode::Strings, DontEnumPropertiesMode::Exclude)));
 }
@@ -3284,7 +3284,7 @@ JSC::EncodedJSValue JSC__JSGlobalObject__createAggregateError(JSC::JSGlobalObjec
     }
     if (!array) {
         JSC::throwOutOfMemoryError(globalObject, scope);
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
 
     JSC::Structure* errorStructure = globalObject->errorStructure(JSC::ErrorType::AggregateError);
@@ -4088,18 +4088,18 @@ JSC::EncodedJSValue JSC__JSValue__fromTimevalNoTruncate(JSC::JSGlobalObject* glo
     auto& vm = JSC::getVM(globalObject);
     auto scope = DECLARE_THROW_SCOPE(vm);
     auto big_nsec = JSC::JSBigInt::createFrom(globalObject, nsec);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     auto big_sec = JSC::JSBigInt::createFrom(globalObject, sec);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     auto big_1e6 = JSC::JSBigInt::createFrom(globalObject, 1e6);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     auto sec_as_nsec = JSC::JSBigInt::multiply(globalObject, big_1e6, big_sec);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     ASSERT(sec_as_nsec.isHeapBigInt());
     auto* big_sec_as_nsec = sec_as_nsec.asHeapBigInt();
     ASSERT(big_sec_as_nsec);
     auto result = JSC::JSBigInt::add(globalObject, big_sec_as_nsec, big_nsec);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     return JSC::JSValue::encode(result);
 }
 
@@ -4174,10 +4174,10 @@ JSC::EncodedJSValue JSC__JSValue__createObject2(JSC::JSGlobalObject* globalObjec
 
     object->methodTable()
         ->defineOwnProperty(object, globalObject, key2, descriptor2, true);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     object->methodTable()
         ->defineOwnProperty(object, globalObject, key1, descriptor1, true);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     return JSC::JSValue::encode(object);
 }
@@ -4233,13 +4233,13 @@ JSC::EncodedJSValue JSC__JSValue__getPropertyValue(JSC::EncodedJSValue encodedVa
     auto scope = DECLARE_THROW_SCOPE(vm);
     PropertySlot slot(object, PropertySlot::InternalMethodType::Get);
     if (!object->getPropertySlot(globalObject, property, slot)) {
-        RETURN_IF_EXCEPTION(scope, {});
+        RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
         { JSC::EncodedJSValue v; JSC::EncodedJSValueHashTraits::constructDeletedValue(v); return v; }
     }
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     JSValue result = slot.getValue(globalObject, property);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     return JSValue::encode(result);
 }
@@ -4256,10 +4256,10 @@ extern "C" JSC::EncodedJSValue JSC__JSValue__getOwn(JSC::EncodedJSValue JSValue0
     auto property = JSC::PropertyName(identifier);
     PropertySlot slot(value, PropertySlot::InternalMethodType::GetOwnProperty);
     bool hasSlot = value.getOwnPropertySlot(globalObject, property, slot);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     if (!hasSlot) return {};
     auto slotValue = slot.getValue(globalObject, property);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     return JSValue::encode(slotValue);
 }
 
@@ -4273,14 +4273,14 @@ JSC::EncodedJSValue JSC__JSValue__getIfPropertyExistsFromPath(JSC::EncodedJSValu
 
     if (path.isString()) {
         String pathString = path.toWTFString(globalObject);
-        RETURN_IF_EXCEPTION(scope, {});
+        RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
         uint32_t length = pathString.length();
 
         if (length == 0) {
             auto* valueObject = value.toObject(globalObject);
-            RETURN_IF_EXCEPTION(scope, {});
+            RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
             JSValue prop = valueObject->getIfPropertyExists(globalObject, vm.propertyNames->emptyIdentifier);
-            RETURN_IF_EXCEPTION(scope, {});
+            RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
             return JSValue::encode(prop);
         }
 
@@ -4295,9 +4295,9 @@ JSC::EncodedJSValue JSC__JSValue__getIfPropertyExistsFromPath(JSC::EncodedJSValu
         // if "." is the only character, it will search for an empty string twice.
         if (pathString.codeUnitAt(0) == '.') {
             auto* currPropObject = currProp.toObject(globalObject);
-            RETURN_IF_EXCEPTION(scope, {});
+            RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
             currProp = currPropObject->getIfPropertyExists(globalObject, vm.propertyNames->emptyIdentifier);
-            RETURN_IF_EXCEPTION(scope, {});
+            RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
             if (currProp.isEmpty()) {
                 return JSValue::encode(currProp);
             }
@@ -4311,15 +4311,15 @@ JSC::EncodedJSValue JSC__JSValue__getIfPropertyExistsFromPath(JSC::EncodedJSValu
 
                     if (ic == '.') {
                         auto* currPropObject = currProp.toObject(globalObject);
-                        RETURN_IF_EXCEPTION(scope, {});
+                        RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
                         currProp = currPropObject->getIfPropertyExists(globalObject, vm.propertyNames->emptyIdentifier);
-                        RETURN_IF_EXCEPTION(scope, {});
+                        RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
                         return JSValue::encode(currProp);
                     }
 
                     // nothing found.
                     if (j == 0) {
-                        return {};
+                        return JSC::JSValue::encode(JSC::JSValue());
                     }
 
                     return JSValue::encode(currProp);
@@ -4329,9 +4329,9 @@ JSC::EncodedJSValue JSC__JSValue__getIfPropertyExistsFromPath(JSC::EncodedJSValu
                 ic = pathString.codeUnitAt(i);
                 if (previous == '.' && ic == '.') {
                     auto* currPropObject = currProp.toObject(globalObject);
-                    RETURN_IF_EXCEPTION(scope, {});
+                    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
                     currProp = currPropObject->getIfPropertyExists(globalObject, vm.propertyNames->emptyIdentifier);
-                    RETURN_IF_EXCEPTION(scope, {});
+                    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
                     if (currProp.isEmpty()) {
                         return JSValue::encode(currProp);
                     }
@@ -4354,9 +4354,9 @@ JSC::EncodedJSValue JSC__JSValue__getIfPropertyExistsFromPath(JSC::EncodedJSValu
             PropertyName propName = PropertyName(Identifier::fromString(vm, propNameStr));
 
             auto* currPropObject = currProp.toObject(globalObject);
-            RETURN_IF_EXCEPTION(scope, {});
+            RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
             currProp = currPropObject->getIfPropertyExists(globalObject, propName);
-            RETURN_IF_EXCEPTION(scope, {});
+            RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
             if (currProp.isEmpty()) {
                 return JSValue::encode(currProp);
             }
@@ -4371,7 +4371,7 @@ JSC::EncodedJSValue JSC__JSValue__getIfPropertyExistsFromPath(JSC::EncodedJSValu
         // each item in array is property name, ignore dot/bracket notation
         JSValue currProp = value;
         auto* pathObject = path.toObject(globalObject);
-        RETURN_IF_EXCEPTION(scope, {});
+        RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
         forEachInArrayLike(globalObject, pathObject, [&](JSValue item) -> bool {
             if (!(item.isString() || item.isNumber())) {
                 currProp = {};
@@ -4379,25 +4379,25 @@ JSC::EncodedJSValue JSC__JSValue__getIfPropertyExistsFromPath(JSC::EncodedJSValu
             }
 
             JSString* propNameString = item.toString(globalObject);
-            RETURN_IF_EXCEPTION(scope, {});
+            RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
             PropertyName propName = PropertyName(propNameString->toIdentifier(globalObject));
-            RETURN_IF_EXCEPTION(scope, {});
+            RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
             auto* currPropObject = currProp.toObject(globalObject);
-            RETURN_IF_EXCEPTION(scope, {});
+            RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
             currProp = currPropObject->getIfPropertyExists(globalObject, propName);
-            RETURN_IF_EXCEPTION(scope, {});
+            RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
             if (currProp.isEmpty()) {
                 return false;
             }
 
             return true;
         });
-        RETURN_IF_EXCEPTION(scope, {});
+        RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
         return JSValue::encode(currProp);
     }
 
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 void JSC__JSValue__getSymbolDescription(JSC::EncodedJSValue symbolValue_, JSC::JSGlobalObject* arg1, ZigString* arg2)
@@ -4659,7 +4659,7 @@ JSC::EncodedJSValue JSC__JSValue__toError_(JSC::EncodedJSValue JSValue0)
 {
     JSC::JSValue value = JSC::JSValue::decode(JSValue0);
     if (value.isEmpty() || !value.isCell())
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
 
     JSC::JSCell* cell = value.asCell();
 
@@ -4676,7 +4676,7 @@ JSC::EncodedJSValue JSC__JSValue__toError_(JSC::EncodedJSValue JSValue0)
     }
     }
 
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 #pragma mark - JSC::VM
@@ -5063,7 +5063,7 @@ extern "C" JSC::EncodedJSValue JSC__JSValue__fastGetOwn(JSC::EncodedJSValue JSVa
         return JSValue::encode(slot.getValue(globalObject, name));
     }
 
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 __attribute__((__always_inline__)) bool JSC__JSValue__toBoolean(JSC::EncodedJSValue JSValue0)
@@ -5591,7 +5591,7 @@ extern "C" JSC::EncodedJSValue WebCore__AbortSignal__reasonIfAborted(WebCore::Ab
         return JSValue::encode(signal->jsReason(*globalObject));
     }
 
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 extern "C" bool WebCore__AbortSignal__aborted(WebCore::AbortSignal* arg0)
@@ -5683,18 +5683,18 @@ extern "C" JSC::EncodedJSValue JSC__JSValue__getOwnByValue(JSC::EncodedJSValue v
     PropertySlot slot(object, PropertySlot::InternalMethodType::GetOwnProperty);
     if (property.getUInt32(index)) {
         if (!object->getOwnPropertySlotByIndex(object, globalObject, index, slot))
-            return {};
+            return JSC::JSValue::encode(JSC::JSValue());
 
-        RETURN_IF_EXCEPTION(scope, {});
+        RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
         return JSC::JSValue::encode(slot.getValue(globalObject, index));
     } else {
         auto propertyName = property.toPropertyKey(globalObject);
-        RETURN_IF_EXCEPTION(scope, {});
+        RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
         if (!object->getOwnNonIndexPropertySlot(vm, object->structure(), propertyName, slot))
-            return {};
+            return JSC::JSValue::encode(JSC::JSValue());
 
-        RETURN_IF_EXCEPTION(scope, {});
+        RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
         return JSC::JSValue::encode(slot.getValue(globalObject, propertyName));
     }
@@ -5874,7 +5874,7 @@ CPP_DECL [[ZIG_EXPORT(zero_is_throw)]] JSC::EncodedJSValue JSC__JSMap__get(JSC::
     // It will return JSValue::undefined and set an exception on the VM.
     auto scope = DECLARE_THROW_SCOPE(vm);
     const JSValue value = map->get(arg1, key);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     return JSC::JSValue::encode(value);
 }
 
@@ -6013,7 +6013,7 @@ extern "C" JSC::EncodedJSValue JSGlobalObject__tryTakeException(JSC::JSGlobalObj
         return JSC::JSValue::encode(exception);
     }
 
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 CPP_DECL bool JSC__GetterSetter__isGetterNull(JSC::GetterSetter* gettersetter)
@@ -6137,13 +6137,13 @@ CPP_DECL void Bun__CallFrame__getCallerSrcLoc(JSC::CallFrame* callFrame, JSC::JS
 extern "C" EncodedJSValue Bun__JSObject__getCodePropertyVMInquiry(JSC::JSGlobalObject* global, JSC::JSObject* object)
 {
     if (!object) [[unlikely]] {
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
 
     auto& vm = global->vm();
     auto scope = DECLARE_TOP_EXCEPTION_SCOPE(vm);
     if (object->type() == JSC::ProxyObjectType) [[unlikely]] {
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
 
     auto& builtinNames = WebCore::builtinNames(vm);
@@ -6153,11 +6153,11 @@ extern "C" EncodedJSValue Bun__JSObject__getCodePropertyVMInquiry(JSC::JSGlobalO
     auto has = object->getNonIndexPropertySlot(global, builtinNames.codePublicName(), slot);
     scope.assertNoExceptionExceptTermination();
     if (!has) {
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
 
     if (slot.isAccessor() || slot.isCustom()) {
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
 
     return JSValue::encode(slot.getPureResult());
