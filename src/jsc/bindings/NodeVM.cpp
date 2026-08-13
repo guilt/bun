@@ -459,10 +459,10 @@ JSC::EncodedJSValue createCachedData(JSGlobalObject* globalObject, const JSC::So
     auto scope = DECLARE_THROW_SCOPE(vm);
 
     JSC::ProgramExecutable* executable = JSC::ProgramExecutable::create(globalObject, source);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     RefPtr<JSC::CachedBytecode> bytecode = getBytecode(globalObject, executable, source);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     if (!bytecode) [[unlikely]] {
         return throwVMError(globalObject, scope, "createCachedData failed"_s);
@@ -470,7 +470,7 @@ JSC::EncodedJSValue createCachedData(JSGlobalObject* globalObject, const JSC::So
 
     std::span<const uint8_t> bytes = bytecode->span();
     JSC::JSUint8Array* buffer = WebCore::createBuffer(globalObject, bytes);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     if (!buffer) {
         return throwVMError(globalObject, scope, "Failed to create buffer"_s);
@@ -739,7 +739,7 @@ JSC::EncodedJSValue INVALID_ARG_VALUE_VM_VARIATION(JSC::ThrowScope& throwScope, 
 {
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_TYPE, makeString("The \""_s, name, "\" argument must be an vm.Context"_s)));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 bool isContext(JSGlobalObject* globalObject, JSValue value)

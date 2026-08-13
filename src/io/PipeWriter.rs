@@ -1610,7 +1610,7 @@ impl<Parent: WindowsBufferedWriterParent> WindowsBufferedWriter<Parent> {
         // and recovers `&mut File` via container_of. Single-threaded dispatch,
         // no other Rust borrow of the boxed `File` is live.
         let (file, result, parent_ptr) = unsafe { crate::source::File::from_fs_callback(fs) };
-        let was_canceled = result.int() == uv::UV_ECANCELED as i64;
+        let was_canceled = result.int() == uv::UV_ECANCELED as isize;
 
         // ALWAYS complete first — the boxed `source::File` outlives this
         // callback (detach()/close() gates free).
@@ -2180,7 +2180,7 @@ impl<Parent: WindowsStreamingWriterParent> WindowsStreamingWriter<Parent> {
         // and recovers `&mut File` via container_of. Single-threaded dispatch,
         // no other Rust borrow of the boxed `File` is live.
         let (file, result, parent_ptr) = unsafe { crate::source::File::from_fs_callback(fs) };
-        let was_canceled = result.int() == uv::UV_ECANCELED as i64;
+        let was_canceled = result.int() == uv::UV_ECANCELED as isize;
 
         // ALWAYS complete first — the boxed `source::File` outlives this
         // callback (detach()/close() gates free).

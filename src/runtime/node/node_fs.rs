@@ -948,7 +948,7 @@ mod _async_tasks {
             // `this: &mut Self` is live, re-deriving through the raw `req` would create a
             // second overlapping `&mut` (Stacked-Borrows UB). Go through `this.req` instead.
             this.result =
-                NodeFS::uv_dispatch::<R, A, F>(&mut node_fs, &this.args, this.req.result.int());
+                NodeFS::uv_dispatch::<R, A, F>(&mut node_fs, &this.args, this.req.result.int() as i64);
             // `sys::Error::path` is `Box<[u8]>` boxed at the
             // `errno_sys_p` construction site, so no clone is needed — `node_fs` may drop.
             let this_ptr: *mut Self = this;
@@ -971,7 +971,7 @@ mod _async_tasks {
             // evaluated after `&mut this.req` is formed in the same call expression.
             let rc = this.req.result.int();
             this.result =
-                NodeFS::uv_dispatch_req::<R, A, F>(&mut node_fs, &this.args, &mut this.req, rc);
+                NodeFS::uv_dispatch_req::<R, A, F>(&mut node_fs, &this.args, &mut this.req, rc as i64);
             // No `err.clone()` needed — see `uv_callback` above.
             let this_ptr: *mut Self = this;
             this.global_object()

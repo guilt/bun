@@ -326,7 +326,7 @@ String makeUnsupportedIndexedSetterErrorMessage(ASCIILiteral interfaceName)
 EncodedJSValue throwThisTypeError(JSC::JSGlobalObject& lexicalGlobalObject, JSC::ThrowScope& scope, ASCIILiteral interfaceName, ASCIILiteral attributeName)
 {
     scope.throwException(&lexicalGlobalObject, Bun::createInvalidThisError(&lexicalGlobalObject, makeThisTypeErrorMessage(interfaceName, attributeName)));
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue rejectPromiseWithThisTypeError(DeferredPromise& promise, ASCIILiteral interfaceName, ASCIILiteral methodName)

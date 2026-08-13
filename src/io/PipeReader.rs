@@ -1435,7 +1435,7 @@ impl WindowsBufferedReader {
                 // of 74468 bytes). Just ignore 0-byte reads and let libuv continue.
                 return;
             }
-            v if v == uv::UV_EOF as i64 => {
+            v if v == uv::UV_EOF as isize => {
                 let _ = this.stop_reading();
                 // EOF (buf is not safe to access here)
                 return this.on_read(sys::Result::Ok(0), &mut [], ReadState::Eof);
@@ -1471,7 +1471,7 @@ impl WindowsBufferedReader {
         // `&mut WindowsBufferedReader` (distinct heap allocations).
         let (file, result, parent_ptr) = unsafe { crate::source::File::from_fs_callback(fs) };
         let nread_int = result.int();
-        let was_canceled = nread_int == uv::UV_ECANCELED as i64;
+        let was_canceled = nread_int == uv::UV_ECANCELED as isize;
 
         bun_sys::syslog!(
             "onFileRead({}) = {}",
@@ -1522,12 +1522,12 @@ impl WindowsBufferedReader {
 
         match nread_int {
             // 0 actually means EOF too
-            v if v == 0 || v == uv::UV_EOF as i64 => {
+            v if v == 0 || v == uv::UV_EOF as isize => {
                 this.flags.insert(WindowsFlags::IS_PAUSED);
                 this.on_read(sys::Result::Ok(0), &mut [], ReadState::Eof);
             }
             // UV_ECANCELED needs to be on the top so we avoid UAF
-            v if v == uv::UV_ECANCELED as i64 => unreachable!(),
+            v if v == uv::UV_ECANCELED as isize => unreachable!(),
             _ => {
                 if let Some(err) = result.to_error(sys::Tag::read) {
                     this.flags.insert(WindowsFlags::IS_PAUSED);

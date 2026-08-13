@@ -1455,7 +1455,7 @@ extern "C" JSC::EncodedJSValue Bun__createArrayBufferForCopy(JSC::JSGlobalObject
 
     if (!arrayBuffer) [[unlikely]] {
         JSC::throwOutOfMemoryError(globalObject, scope);
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
 
     if (len > 0)
@@ -1469,7 +1469,7 @@ extern "C" JSC::EncodedJSValue Bun__allocUint8ArrayForCopy(JSC::JSGlobalObject* 
     auto scope = DECLARE_THROW_SCOPE(globalObject->vm());
 
     JSC::JSUint8Array* array = JSC::JSUint8Array::createUninitialized(globalObject, globalObject->m_typedArrayUint8.get(globalObject), len);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     *ptr = array->vector();
 
@@ -1484,7 +1484,7 @@ extern "C" JSC::EncodedJSValue Bun__allocArrayBufferForCopy(JSC::JSGlobalObject*
 
     auto* subclassStructure = globalObject->JSBufferSubclassStructure();
     auto buf = JSC::JSUint8Array::createUninitialized(lexicalGlobalObject, subclassStructure, len);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     *ptr = buf->vector();
 
@@ -1498,7 +1498,7 @@ extern "C" JSC::EncodedJSValue Bun__createUint8ArrayForCopy(JSC::JSGlobalObject*
 
     auto* subclassStructure = isBuffer ? static_cast<Zig::GlobalObject*>(globalObject)->JSBufferSubclassStructure() : globalObject->typedArrayStructureWithTypedArrayType<TypeUint8>();
     JSC::JSUint8Array* array = JSC::JSUint8Array::createUninitialized(globalObject, subclassStructure, len);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     if (len > 0 && ptr != nullptr)
         memcpy(array->vector(), ptr, len);
@@ -1516,7 +1516,7 @@ extern "C" JSC::EncodedJSValue Bun__makeArrayBufferWithBytesNoCopy(JSC::JSGlobal
     }));
 
     JSArrayBuffer* jsBuffer = JSArrayBuffer::create(vm, globalObject->arrayBufferStructure(ArrayBufferSharingMode::Default), WTF::move(buffer));
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     return JSValue::encode(jsBuffer);
 }
 
@@ -1531,7 +1531,7 @@ extern "C" JSC::EncodedJSValue Bun__makeTypedArrayWithBytesNoCopy(JSC::JSGlobalO
     RefPtr<ArrayBuffer>&& buffer = WTF::move(buffer_);
     if (!buffer) {
         throwOutOfMemoryError(globalObject, scope);
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
 
     unsigned elementByteSize = elementSize(ty);
@@ -1550,7 +1550,7 @@ extern "C" JSC::EncodedJSValue Bun__makeTypedArrayWithBytesNoCopy(JSC::JSGlobalO
         ASSERT_NOT_REACHED();
     }
 
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 extern "C" JSC::EncodedJSValue Bun__createTypedArrayForCopy(JSC::JSGlobalObject* globalObject, TypedArrayType ty, const void* ptr, size_t byteLength)
@@ -1561,7 +1561,7 @@ extern "C" JSC::EncodedJSValue Bun__createTypedArrayForCopy(JSC::JSGlobalObject*
     RefPtr<ArrayBuffer> buffer = ArrayBuffer::tryCreateUninitialized(byteLength, 1);
     if (!buffer) [[unlikely]] {
         throwOutOfMemoryError(globalObject, scope);
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
     if (byteLength > 0 && ptr != nullptr)
         memcpy(buffer->data(), ptr, byteLength);
@@ -1582,7 +1582,7 @@ extern "C" JSC::EncodedJSValue Bun__createTypedArrayForCopy(JSC::JSGlobalObject*
         ASSERT_NOT_REACHED();
     }
 
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC_DECLARE_HOST_FUNCTION(functionCreateUninitializedArrayBuffer);
@@ -1895,7 +1895,7 @@ extern "C" JSC::EncodedJSValue Bun__Jest__testModuleObject(Zig::GlobalObject* gl
     auto& vm = JSC::getVM(globalObject);
     auto scope = DECLARE_THROW_SCOPE(vm);
     JSC::JSObject* object = globalObject->lazyTestModuleObject();
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     return JSValue::encode(object);
 }
 

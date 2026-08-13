@@ -685,7 +685,24 @@ BOOL __stdcall GetQueuedCompletionStatusEx(HANDLE CompletionPort, LPOVERLAPPED_E
             }
             num++;
         } else {
-            break;
+            DWORD err = GetLastError();
+            /* A failed OVERLAPPED operation is still a dequeued completion: the
+             * caller (libuv's IOCP loop) inspects the OVERLAPPED to learn the
+             * per-op error (e.g. ERROR_BROKEN_PIPE -> UV_EOF). GetQueuedCompletionStatus
+             * returns FALSE for those with GetLastError() set to the op's error;
+             * only a genuine WAIT_TIMEOUT means nothing was dequeued. Deliver the
+             * failed completion so libuv processes it instead of treating the
+             * error as a fatal IOCP failure. */
+            if (err != WAIT_TIMEOUT && overlap) {
+                if (lpCompletionPortEntries) {
+                    lpCompletionPortEntries[num].lpOverlapped = overlap;
+                    lpCompletionPortEntries[num].dwNumberOfBytesTransferred = xfer;
+                    lpCompletionPortEntries[num].lpCompletionKey = key;
+                }
+                num++;
+            } else {
+                break;
+            }
         }
     }
     *ulNumEntriesRemoved = num;

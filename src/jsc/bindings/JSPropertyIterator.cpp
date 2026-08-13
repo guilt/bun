@@ -142,12 +142,12 @@ extern "C" EncodedJSValue Bun__JSPropertyIterator__getNameAndValue(JSPropertyIte
     // If we meant for this to only run for own keys, the property name would not be included in the array.
     PropertySlot slot(object, PropertySlot::InternalMethodType::Get);
     if (!object->getPropertySlot(globalObject, prop, slot)) {
-        RELEASE_AND_RETURN(scope, {});
+        RELEASE_AND_RETURN(scope, JSC::JSValue::encode(JSC::JSValue()));
     }
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     JSValue result = slot.getValue(globalObject, prop);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     *propertyName = Bun::toString(prop.impl());
     return JSValue::encode(result);
@@ -165,16 +165,16 @@ extern "C" EncodedJSValue Bun__JSPropertyIterator__getNameAndValueNonObservable(
 
     PropertySlot slot(object, PropertySlot::InternalMethodType::VMInquiry, vm.ptr());
     auto has = object->getNonIndexPropertySlot(globalObject, prop, slot);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     if (!has) {
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
     if (slot.isAccessor() || slot.isCustom()) {
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
 
     JSValue result = slot.getPureResult();
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     *propertyName = Bun::toString(prop.impl());
     return JSValue::encode(result);

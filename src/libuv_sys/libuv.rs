@@ -2338,16 +2338,18 @@ impl fmt::Display for ReturnCode {
     }
 }
 
+/// `uv_ssize_t` / `ssize_t` is `intptr_t` — pointer-width, so `i64` on
+/// 64-bit targets but `i32` on 32-bit (win32). `isize` matches on both.
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct ReturnCodeI64(pub i64);
+pub struct ReturnCodeI64(pub isize);
 impl ReturnCodeI64 {
     #[inline]
-    pub const fn init(i: i64) -> ReturnCodeI64 {
+    pub const fn init(i: isize) -> ReturnCodeI64 {
         ReturnCodeI64(i)
     }
     #[inline]
-    pub const fn int(self) -> i64 {
+    pub const fn int(self) -> isize {
         self.0
     }
     #[inline]

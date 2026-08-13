@@ -76,7 +76,7 @@ extern "C" JSC::EncodedJSValue Bun__JSWrappingFunction__getWrappedFunction(
         JSC::JSObject* wrappedFn = thisObject->m_wrappedFn.get();
         return JSC::JSValue::encode(wrappedFn);
     }
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 }

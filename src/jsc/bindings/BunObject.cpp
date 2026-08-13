@@ -123,7 +123,7 @@ JSC::EncodedJSValue flattenArrayOfBuffersIntoArrayBufferOrUint8Array(JSGlobalObj
     auto array = dynamicDowncast<JSC::JSArray>(arrayValue);
     if (!array) [[unlikely]] {
         throwTypeError(lexicalGlobalObject, throwScope, "Argument must be an array"_s);
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
 
     const auto returnEmptyArrayBufferView = [&]() -> EncodedJSValue {
@@ -144,7 +144,7 @@ JSC::EncodedJSValue flattenArrayOfBuffersIntoArrayBufferOrUint8Array(JSGlobalObj
     args.ensureCapacity(array->length());
     if (args.hasOverflowed()) [[unlikely]] {
         throwOutOfMemoryError(lexicalGlobalObject, throwScope);
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
 
     JSC::forEachInArrayLike(lexicalGlobalObject, array, [&](JSValue element) -> bool {
@@ -154,7 +154,7 @@ JSC::EncodedJSValue flattenArrayOfBuffersIntoArrayBufferOrUint8Array(JSGlobalObj
     RETURN_IF_EXCEPTION(throwScope, {});
     if (args.hasOverflowed()) [[unlikely]] {
         throwOutOfMemoryError(lexicalGlobalObject, throwScope);
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
 
     // All user code is done running. Validate each element and sum their
@@ -182,7 +182,7 @@ JSC::EncodedJSValue flattenArrayOfBuffersIntoArrayBufferOrUint8Array(JSGlobalObj
             byteLength += impl->byteLength();
         } else {
             throwTypeError(lexicalGlobalObject, throwScope, "Expected TypedArray"_s);
-            return {};
+            return JSC::JSValue::encode(JSC::JSValue());
         }
     }
     byteLength = std::min(byteLength, maxLength);
@@ -194,7 +194,7 @@ JSC::EncodedJSValue flattenArrayOfBuffersIntoArrayBufferOrUint8Array(JSGlobalObj
     auto buffer = JSC::ArrayBuffer::tryCreateUninitialized(byteLength, 1);
     if (!buffer) [[unlikely]] {
         throwTypeError(lexicalGlobalObject, throwScope, "Failed to allocate ArrayBuffer"_s);
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
 
     size_t remain = byteLength;

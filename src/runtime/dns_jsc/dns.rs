@@ -480,7 +480,7 @@ pub(super) mod lib_uv_backend {
                         (*resolver).drain_pending_host_native(
                             (*request).cache.pos_in_pending(),
                             (*request).head.global_this(),
-                            rc.int(),
+                            rc.int() as i32,
                             &GetAddrInfoResultAny::Addrinfo(ptr::null_mut()),
                         );
                         return Ok(promise);
@@ -490,7 +490,7 @@ pub(super) mod lib_uv_backend {
                 // + `heap::take` would double-Drop `DNSLookup` (impls Drop).
                 let owned = *bun_core::heap::take(request);
                 let mut head = owned.head;
-                DNSLookup::process_get_addr_info_native(&mut head, rc.int(), ptr::null_mut());
+                DNSLookup::process_get_addr_info_native(&mut head, rc.int() as i32, ptr::null_mut());
                 return Ok(promise);
             }
             promise

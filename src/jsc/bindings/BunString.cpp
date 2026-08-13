@@ -106,7 +106,7 @@ extern "C" [[ZIG_EXPORT(zero_is_throw)]] JSC::EncodedJSValue BunString__createUT
     EXCEPTION_ASSERT(str.isNull() == !!scope.exception());
     if (str.isNull()) [[unlikely]] {
         throwOutOfMemoryError(globalObject, scope);
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
     scope.assertNoException();
     return JSValue::encode(jsString(vm, WTF::move(str)));
@@ -534,7 +534,7 @@ extern "C" [[ZIG_EXPORT(zero_is_throw)]] JSC::EncodedJSValue BunString__toJSON(
         scope.throwException(globalObject, createSyntaxError(globalObject, "Failed to parse JSON"_s));
     }
 
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     return JSC::JSValue::encode(result);
 }
@@ -937,15 +937,15 @@ extern "C" JSC::EncodedJSValue JSC__JSValue__upsertBunStringArray(
     JSC::JSObject* target = targetValue.getObject();
     if (!target) {
         scope.throwException(global, createTypeError(global, "Target must be an object"_s));
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     JSC::JSValue newValue = JSC::JSValue::decode(encodedValue);
     auto& vm = global->vm();
     WTF::String str = key->tag == BunStringTag::Empty ? WTF::emptyString() : key->toWTFString();
     Identifier id = Identifier::fromString(vm, str);
     auto existingValue = target->getIfPropertyExists(global, id);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     if (!existingValue.isEmpty()) {
         // If existing value is already an array, push to it
@@ -964,7 +964,7 @@ extern "C" JSC::EncodedJSValue JSC__JSValue__upsertBunStringArray(
         target->putDirect(vm, id, newValue, 0);
     }
 
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     return JSC::JSValue::encode(JSC::jsUndefined());
 }
 

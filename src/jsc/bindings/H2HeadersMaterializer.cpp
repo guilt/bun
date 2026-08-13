@@ -76,9 +76,9 @@ extern "C" [[ZIG_EXPORT(zero_is_throw)]] JSC::EncodedJSValue Bun__h2__materializ
     auto scope = DECLARE_THROW_SCOPE(vm);
 
     JSC::JSArray* raw = JSC::constructEmptyArray(globalObject, nullptr, static_cast<unsigned>(fieldCount * 2));
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     JSC::JSObject* obj = JSC::constructEmptyObject(vm, globalObject->nullPrototypeObjectStructure());
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     JSC::JSArray* sensitive = nullptr;
 
     size_t offset = 0;
@@ -109,32 +109,32 @@ extern "C" [[ZIG_EXPORT(zero_is_throw)]] JSC::EncodedJSValue Bun__h2__materializ
         JSString* valueStr = h2ValueToJS(vm, valueBytes, valueLen);
         if (!valueStr) [[unlikely]] {
             throwOutOfMemoryError(globalObject, scope);
-            return {};
+            return JSC::JSValue::encode(JSC::JSValue());
         }
 
         raw->putDirectIndex(globalObject, rawIndex++, nameStr);
-        RETURN_IF_EXCEPTION(scope, {});
+        RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
         raw->putDirectIndex(globalObject, rawIndex++, valueStr);
-        RETURN_IF_EXCEPTION(scope, {});
+        RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
         if (isSensitive) {
             if (!sensitive) {
                 sensitive = JSC::constructEmptyArray(globalObject, nullptr, 0);
-                RETURN_IF_EXCEPTION(scope, {});
+                RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
             }
             sensitive->putDirectIndex(globalObject, sensitive->length(), nameStr);
-            RETURN_IF_EXCEPTION(scope, {});
+            RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
         }
 
         const String nameString = nameStr->getString(globalObject);
-        RETURN_IF_EXCEPTION(scope, {});
+        RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
         const auto ident = Identifier::fromString(vm, nameString);
 
         JSValue fieldValue = valueStr;
         if (nameView == ":status"_s) {
             // toHeaderObject: `value |= 0` — exact ToInt32(ToNumber(string)).
             double num = valueStr->toNumber(globalObject);
-            RETURN_IF_EXCEPTION(scope, {});
+            RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
             fieldValue = jsNumber(JSC::toInt32(num));
         }
 
@@ -144,10 +144,10 @@ extern "C" [[ZIG_EXPORT(zero_is_throw)]] JSC::EncodedJSValue Bun__h2__materializ
         // index-like case through *Index variants like NodeHTTP.cpp does.
         if (auto index = parseIndex(ident)) [[unlikely]] {
             JSValue existing = obj->getDirectIndex(globalObject, *index);
-            RETURN_IF_EXCEPTION(scope, {});
+            RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
             if (!existing) {
                 obj->putDirectIndex(globalObject, *index, fieldValue);
-                RETURN_IF_EXCEPTION(scope, {});
+                RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
             }
             // No multi-value join for index-like names — set-cookie/cookie are
             // never numeric, and node's compat layer also takes first-wins for
@@ -158,9 +158,9 @@ extern "C" [[ZIG_EXPORT(zero_is_throw)]] JSC::EncodedJSValue Bun__h2__materializ
         if (!existing) {
             if (isSetCookie) {
                 JSC::JSArray* arr = JSC::constructEmptyArray(globalObject, nullptr, 1);
-                RETURN_IF_EXCEPTION(scope, {});
+                RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
                 arr->putDirectIndex(globalObject, 0, fieldValue);
-                RETURN_IF_EXCEPTION(scope, {});
+                RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
                 obj->putDirect(vm, ident, arr, 0);
             } else {
                 obj->putDirect(vm, ident, fieldValue, 0);
@@ -169,13 +169,13 @@ extern "C" [[ZIG_EXPORT(zero_is_throw)]] JSC::EncodedJSValue Bun__h2__materializ
             if (isSetCookie) {
                 JSC::JSArray* arr = JSC::asArray(existing);
                 arr->putDirectIndex(globalObject, arr->length(), fieldValue);
-                RETURN_IF_EXCEPTION(scope, {});
+                RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
             } else {
                 // cookie joins with "; ", everything else with ", " (RFC 7230 §3.2.2).
                 auto existingString = existing.toWTFString(globalObject);
-                RETURN_IF_EXCEPTION(scope, {});
+                RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
                 auto valueString = valueStr->getString(globalObject);
-                RETURN_IF_EXCEPTION(scope, {});
+                RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
                 auto joined = nameView == "cookie"_s
                     ? WTF::makeString(existingString, "; "_s, valueString)
                     : WTF::makeString(existingString, ", "_s, valueString);
@@ -189,20 +189,20 @@ extern "C" [[ZIG_EXPORT(zero_is_throw)]] JSC::EncodedJSValue Bun__h2__materializ
         JSValue sensitiveProp = sensitive;
         if (!sensitive) {
             sensitiveProp = JSC::constructEmptyArray(globalObject, nullptr, 0);
-            RETURN_IF_EXCEPTION(scope, {});
+            RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
         }
         auto symbolImpl = vm.symbolRegistry().symbolForKey("nodejs.http2.sensitiveHeaders"_s);
         obj->putDirect(vm, Identifier::fromUid(vm, &symbolImpl.get()), sensitiveProp, 0);
     }
 
     JSC::JSArray* tuple = JSC::constructEmptyArray(globalObject, nullptr, 3);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     tuple->putDirectIndex(globalObject, 0, raw);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     tuple->putDirectIndex(globalObject, 1, obj);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     tuple->putDirectIndex(globalObject, 2, sensitive ? JSValue(sensitive) : jsUndefined());
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     return JSValue::encode(tuple);
 }

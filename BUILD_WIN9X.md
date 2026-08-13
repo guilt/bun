@@ -391,6 +391,27 @@ Windows 8+ API set DLLs (`api-ms-win-core-synch-l1-2-0.dll`, `bcryptprimitives.d
   on first use** (WTF's `ThreadCondition` never calls
   `InitializeConditionVariable`), so the emulation now lazy-creates its event
   with `InterlockedCompareExchange` instead of requiring an explicit init.
+- **`xp_compat.cpp` `GetQueuedCompletionStatusEx` stub drops failed
+  completions**: the XP/win9x fallback (XP lacks the real API) emulated
+  GQCSEx by looping over `GetQueuedCompletionStatus`. When an OVERLAPPED
+  operation failed (e.g. a subprocess pipe hitting `ERROR_BROKEN_PIPE` after
+  the child exits), `GetQueuedCompletionStatus` returns FALSE with
+  `GetLastError()` = the op's error and a valid OVERLAPPED — which the real
+  GQCSEx would have delivered as a completion. The stub's blanket `break` on
+  FALSE dropped it, leaving `GetLastError()` = 109, so libuv's IOCP loop took
+  the non-timeout branch and `uv_fatal_error("GetQueuedCompletionStatusEx")`
+  aborted the process at shutdown. Only `WAIT_TIMEOUT` means nothing was
+  dequeued; a failed op must still be delivered so libuv processes the broken
+  pipe as `UV_EOF`.
+- **libuv `ssize_t` ABI width on 32-bit (`ReturnCodeI64`)**: libuv's
+  `uv_read_cb` `nread` and `uv_fs_t.result` are `ssize_t` = `intptr_t`, which
+  is **4 bytes on win32** but 8 on win64. The Rust bindings declared them as
+  an 8-byte `i64` (`ReturnCodeI64`), so on 32-bit the read callback read 8
+  bytes for a 4-byte value — the upper 4 bytes were garbage, producing a huge
+  bogus `nread` → `usize::try_from(nread)` hit `PosOverflow` and panicked
+  (`int cast`). That made every `Bun.spawn` with piped stdio crash.
+  `ReturnCodeI64` now wraps `isize` (pointer-width, matches `intptr_t` on both
+  platforms) and call sites feeding `i64`/`i32`-typed params cast explicitly.
 - **JIT/WASM options for i586**: WebKit forces `useWasmIPInt`/`useBBQJIT` off
   on non-x86-64/ARM64, so enabling WASM makes `assertOptionsAreCoherent()`
   crash at startup. `ZigGlobalObject.cpp`'s `JSC::initialize` callback now
@@ -437,15 +458,39 @@ For x86 Win9x targets, the following flags are added:
 - `/FORCE:MULTIPLE` — allow duplicate symbols (stub wins)
 - `/alternatename:_RtlRestoreContext@8=_RtlRestoreContext`
 
-### WebKit Vendor Patches
+### Vendor Patches (`vendor-patches/<name>/`)
 
-Four patches in `vendor-patches/WebKit/`:
+Patches that are **local-only fixes for our vendored forks** live in
+`vendor-patches/<name>/*.patch` (one directory per dependency). The build
+**auto-discovers every `*.patch` in `vendor-patches/<dep>/`** (see
+`scripts/build/source.ts` `emitFetch`) and applies it after the dep is
+fetched/checked out, on top of any `patches:` entries listed in the dep's
+`scripts/build/deps/<dep>.ts`. Because auto-discovery is unconditional, these
+patches are applied for every profile that builds the dep from source.
+
+`vendor-patches/WebKit/` (the `local` WebKit the win9x profiles use):
+- `build-icu-78.patch` — point the ICU source build at the release-78.3 tarball
 - `DOMWrapperWorld.h.patch` — strip WebCore DOM wrapper deps
 - `JSDOMConstructorBase.h.patch` — strip constructor base deps
 - `JSDOMWrapper.h.patch` — strip wrapper deps
 - `mimalloc-no-bcrypt-link.patch` — remove bcrypt.lib from mimalloc link list
+- `mimalloc-rtlgenrandom.patch` — fall back to RtlGenRandom on XP (no bcrypt.dll)
 
-Applied automatically during build via the `dep_patch_local` ninja rule.
+`vendor-patches/icu/` (local ICU, `--icu=local`):
+- `build-icu-source.patch`, `makedata-filterfile.patch`,
+  `makedata-skip-testdata.patch` — ICU data-build fixes
+
+`vendor-patches/libuv/`:
+- `win-ssize.patch` — `ssize_t` typedef (4-byte `intptr_t` on win32)
+
+`vendor-patches/libjpeg-turbo/`:
+- `jcphuff-bitscan.patch` — guard `_BitScanForward64` intrinsics to `_WIN64`
+
+`vendor-patches/mimalloc/`:
+- `rtlgenrandom.patch` — XP-safe secure randomness in the direct mimalloc build
+
+These are applied automatically during the build (`dep_fetch` runs
+`apply-local-patches`; `git apply -R --check` skips already-applied patches).
 
 ### Symbol Export
 
@@ -495,6 +540,11 @@ Verified working end-to-end on the host (win9x debug build):
   with fs options objects (all previously crashing — fixed by the
   JSVALUE32_64 sentinel + ZigString tag work above).
 - Plain-JS feature harnesses pass (7/7 and 14/14 assertions).
+- `Bun.spawn` / `Bun.spawnSync` with piped stdio read subprocess output
+  correctly and exit cleanly (was crashing with an `int cast` panic + a
+  `GetQueuedCompletionStatusEx` broken-pipe abort; fixed by the `ReturnCodeI64`
+  width + GQCSEx stub work above). The `arraybuffersink` test suite (which
+  spawns subprocesses) passes 11/11.
 - UTF-8 source files load correctly (multi-byte literals survive the
   transpiler; an earlier `é` → U+FFFD report was a PowerShell `Set-Content`
   ANSI-encoding artifact, not a bun bug).

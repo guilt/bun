@@ -661,7 +661,7 @@ extern "C" JSC::EncodedJSValue JSBundlerPlugin__runSetupFunction(
     auto* lexicalGlobalObject = uncheckedDowncast<JSFunction>(JSValue::decode(encodedSetupFunction))->globalObject();
 
     auto result = JSC::profiledCall(lexicalGlobalObject, ProfilingReason::API, setupFunction, callData, plugin, arguments);
-    RETURN_IF_EXCEPTION(scope, {}); // should be able to use RELEASE_AND_RETURN, no? observed it returning undefined with exception active
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     return JSValue::encode(result);
 }
@@ -720,7 +720,7 @@ extern "C" JSC::EncodedJSValue JSBundlerPlugin__runOnEndCallbacks(Bun::JSBundler
     // TODO: use AsyncContextFrame?
     auto result
         = JSC::profiledCall(globalObject, ProfilingReason::API, runOnEndCallbacksFn, callData, plugin, arguments);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
 
     return JSValue::encode(result);
 }

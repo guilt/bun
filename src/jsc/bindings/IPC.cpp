@@ -16,7 +16,7 @@ extern "C" [[ZIG_EXPORT(zero_is_throw)]] JSC::EncodedJSValue IPCSerialize(Zig::G
     args.append(JSC::JSValue::decode(handle));
 
     auto result = JSC::call(global, serializeFunction, callData, JSC::jsUndefined(), args);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     return JSC::JSValue::encode(result);
 }
 
@@ -33,6 +33,6 @@ extern "C" [[ZIG_EXPORT(zero_is_throw)]] JSC::EncodedJSValue IPCParse(Zig::Globa
     args.append(JSC::JSValue::decode(fd));
 
     auto result = JSC::call(global, parseFunction, callData, JSC::jsUndefined(), args);
-    RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     return JSC::JSValue::encode(result);
 }

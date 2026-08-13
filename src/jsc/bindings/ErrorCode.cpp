@@ -784,7 +784,7 @@ EncodedJSValue INVALID_ARG_TYPE(ThrowScope& scope, JSGlobalObject* globalObject,
 {
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_TYPE, message));
     scope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue INVALID_ARG_TYPE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::String& arg_name, const WTF::String& expected_type, JSC::JSValue val_actual_value)
@@ -793,7 +793,7 @@ JSC::EncodedJSValue INVALID_ARG_TYPE(JSC::ThrowScope& throwScope, JSC::JSGlobalO
     RELEASE_RETURN_IF_EXCEPTION(throwScope, {});
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_TYPE, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue INVALID_ARG_TYPE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, JSC::JSValue val_arg_name, const WTF::String& expected_type, JSC::JSValue val_actual_value)
@@ -806,7 +806,7 @@ JSC::EncodedJSValue INVALID_ARG_TYPE(JSC::ThrowScope& throwScope, JSC::JSGlobalO
     RELEASE_RETURN_IF_EXCEPTION(throwScope, {});
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_TYPE, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue INVALID_ARG_TYPE_INSTANCE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, WTF::ASCIILiteral arg_name, WTF::ASCIILiteral expected_type, WTF::ASCIILiteral expected_instance_types, JSC::JSValue val_actual_value)
@@ -825,7 +825,7 @@ JSC::EncodedJSValue INVALID_ARG_TYPE_INSTANCE(JSC::ThrowScope& throwScope, JSC::
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_TYPE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue INVALID_ARG_TYPE_INSTANCE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, WTF::ASCIILiteral arg_name, WTF::ASCIILiteral expected_instance_types, JSC::JSValue val_actual_value)
@@ -842,7 +842,7 @@ JSC::EncodedJSValue INVALID_ARG_TYPE_INSTANCE(JSC::ThrowScope& throwScope, JSC::
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_TYPE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 // When you want INVALID_ARG_TYPE to say "The argument must be an instance of X. Received Y." instead of "The argument must be of type X. Received Y."
@@ -863,7 +863,7 @@ JSC::EncodedJSValue INVALID_ARG_INSTANCE(JSC::ThrowScope& throwScope, JSC::JSGlo
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_TYPE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue OUT_OF_RANGE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::String& arg_name, double lower, double upper, JSC::JSValue actual)
@@ -881,7 +881,7 @@ JSC::EncodedJSValue OUT_OF_RANGE(JSC::ThrowScope& throwScope, JSC::JSGlobalObjec
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_OUT_OF_RANGE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue OUT_OF_RANGE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, JSC::JSValue arg_name_val, double lower, double upper, JSC::JSValue actual)
@@ -904,7 +904,7 @@ JSC::EncodedJSValue OUT_OF_RANGE(JSC::ThrowScope& throwScope, JSC::JSGlobalObjec
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_OUT_OF_RANGE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue OUT_OF_RANGE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, JSC::JSValue arg_name_val, double bound_num, Bound bound, JSC::JSValue actual)
@@ -926,7 +926,7 @@ JSC::EncodedJSValue OUT_OF_RANGE(JSC::ThrowScope& throwScope, JSC::JSGlobalObjec
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_OUT_OF_RANGE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue OUT_OF_RANGE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, JSC::JSValue arg_name_val, const WTF::String& msg, JSC::JSValue actual)
@@ -947,7 +947,7 @@ JSC::EncodedJSValue OUT_OF_RANGE(JSC::ThrowScope& throwScope, JSC::JSGlobalObjec
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_OUT_OF_RANGE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue OUT_OF_RANGE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::String& arg_name, const WTF::String& msg, JSC::JSValue actual)
@@ -963,14 +963,14 @@ JSC::EncodedJSValue OUT_OF_RANGE(JSC::ThrowScope& throwScope, JSC::JSGlobalObjec
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_OUT_OF_RANGE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue OUT_OF_RANGE(JSC::ThrowScope& scope, JSC::JSGlobalObject* globalObject, ASCIILiteral message)
 {
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_OUT_OF_RANGE, message));
     scope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, WTF::ASCIILiteral name, JSC::JSValue value, const WTF::String& reason)
@@ -990,7 +990,7 @@ JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobal
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_VALUE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 JSC::EncodedJSValue INVALID_ARG_VALUE_RangeError(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, WTF::ASCIILiteral name, JSC::JSValue value, const WTF::String& reason)
 {
@@ -1012,7 +1012,7 @@ JSC::EncodedJSValue INVALID_ARG_VALUE_RangeError(JSC::ThrowScope& throwScope, JS
     auto error = JSC::ErrorInstance::create(vm, structure, builder.toString(), jsUndefined(), nullptr, JSC::RuntimeType::TypeNothing, ErrorType::RangeError, true);
     throwScope.throwException(globalObject, error);
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, JSC::JSValue name, JSC::JSValue value, const WTF::String& reason)
 {
@@ -1030,7 +1030,7 @@ JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobal
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_VALUE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 // for validateOneOf
@@ -1069,7 +1069,7 @@ JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobal
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_VALUE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, WTF::ASCIILiteral name, WTF::ASCIILiteral reason, JSC::JSValue value, const std::span<const ASCIILiteral> oneOf)
@@ -1098,7 +1098,7 @@ JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobal
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_VALUE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, WTF::ASCIILiteral name, WTF::ASCIILiteral reason, JSC::JSValue value, const std::span<const int32_t> oneOf)
@@ -1125,7 +1125,7 @@ JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobal
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_VALUE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::String& name, JSC::JSValue value, const WTF::String& reason)
@@ -1148,7 +1148,7 @@ JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobal
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_VALUE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue INVALID_URL_SCHEME(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::String& expectedScheme)
@@ -1156,21 +1156,21 @@ JSC::EncodedJSValue INVALID_URL_SCHEME(JSC::ThrowScope& throwScope, JSC::JSGloba
     auto message = makeString("The URL must be of scheme "_s, expectedScheme);
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_URL_SCHEME, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 JSC::EncodedJSValue INVALID_FILE_URL_HOST(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::String& platform)
 {
     auto message = makeString("File URL host must be \"localhost\" or empty on "_s, platform);
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_FILE_URL_HOST, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 JSC::EncodedJSValue INVALID_FILE_URL_HOST(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const ASCIILiteral platform)
 {
     auto message = makeString("File URL host must be \"localhost\" or empty on "_s, platform);
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_FILE_URL_HOST, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 /// `File URL path {suffix}`
 JSC::EncodedJSValue INVALID_FILE_URL_PATH(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const ASCIILiteral suffix)
@@ -1178,7 +1178,7 @@ JSC::EncodedJSValue INVALID_FILE_URL_PATH(JSC::ThrowScope& throwScope, JSC::JSGl
     auto message = makeString("File URL path "_s, suffix);
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_FILE_URL_PATH, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue UNKNOWN_ENCODING(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::StringView encoding)
@@ -1186,7 +1186,7 @@ JSC::EncodedJSValue UNKNOWN_ENCODING(JSC::ThrowScope& throwScope, JSC::JSGlobalO
     auto message = makeString("Unknown encoding: "_s, encoding);
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_UNKNOWN_ENCODING, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue UNKNOWN_ENCODING(JSC::ThrowScope& scope, JSGlobalObject* globalObject, JSValue encodingValue)
@@ -1194,10 +1194,10 @@ JSC::EncodedJSValue UNKNOWN_ENCODING(JSC::ThrowScope& scope, JSGlobalObject* glo
     WTF::StringBuilder builder;
     builder.append("Unknown encoding: "_s);
     JSValueToStringSafe(globalObject, builder, encodingValue);
-    RELEASE_RETURN_IF_EXCEPTION(scope, {});
+    RETURN_IF_EXCEPTION(scope, JSC::JSValue::encode(JSC::JSValue()));
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_UNKNOWN_ENCODING, builder.toString()));
     scope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue INVALID_STATE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::String& statemsg)
@@ -1205,7 +1205,7 @@ JSC::EncodedJSValue INVALID_STATE(JSC::ThrowScope& throwScope, JSC::JSGlobalObje
     auto message = makeString("Invalid state: "_s, statemsg);
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_STATE, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue STRING_TOO_LONG(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
@@ -1213,7 +1213,7 @@ JSC::EncodedJSValue STRING_TOO_LONG(JSC::ThrowScope& throwScope, JSC::JSGlobalOb
     auto message = makeString("Cannot create a string longer than "_s, WTF::String ::MaxLength, " characters"_s);
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_STRING_TOO_LONG, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue BUFFER_OUT_OF_BOUNDS(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, ASCIILiteral name)
@@ -1221,11 +1221,11 @@ JSC::EncodedJSValue BUFFER_OUT_OF_BOUNDS(JSC::ThrowScope& throwScope, JSC::JSGlo
     if (!name.isEmpty()) {
         throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_BUFFER_OUT_OF_BOUNDS, makeString("\""_s, name, "\" is outside of buffer bounds"_s)));
         throwScope.release();
-        return {};
+        return JSC::JSValue::encode(JSC::JSValue());
     }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_BUFFER_OUT_OF_BOUNDS, "Attempt to access memory outside buffer bounds"_s));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue UNKNOWN_SIGNAL(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, JSC::JSValue signal, bool triedUppercase)
@@ -1239,7 +1239,7 @@ JSC::EncodedJSValue UNKNOWN_SIGNAL(JSC::ThrowScope& throwScope, JSC::JSGlobalObj
     }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_UNKNOWN_SIGNAL, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue SOCKET_BAD_PORT(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, JSC::JSValue name, JSC::JSValue port, bool allowZero)
@@ -1256,7 +1256,7 @@ JSC::EncodedJSValue SOCKET_BAD_PORT(JSC::ThrowScope& throwScope, JSC::JSGlobalOb
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_SOCKET_BAD_PORT, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
@@ -1264,7 +1264,7 @@ JSC::EncodedJSValue UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET(JSC::ThrowScope& thro
     auto message = "`process.setupUncaughtExceptionCapture()` was called while a capture callback was already active"_s;
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue ASSERTION(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, JSC::JSValue msg)
@@ -1274,14 +1274,14 @@ JSC::EncodedJSValue ASSERTION(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* 
     auto message = msg_string;
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_ASSERTION, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 JSC::EncodedJSValue ASSERTION(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, ASCIILiteral msg)
 {
     auto message = msg;
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_ASSERTION, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INVALID_CURVE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
@@ -1289,14 +1289,14 @@ JSC::EncodedJSValue CRYPTO_INVALID_CURVE(JSC::ThrowScope& throwScope, JSC::JSGlo
     auto message = "Invalid EC curve name"_s;
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_CURVE, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INVALID_KEYTYPE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, WTF::ASCIILiteral message)
 {
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_KEYTYPE, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INVALID_KEYTYPE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
@@ -1304,7 +1304,7 @@ JSC::EncodedJSValue CRYPTO_INVALID_KEYTYPE(JSC::ThrowScope& throwScope, JSC::JSG
     auto message = "Invalid key type"_s;
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_KEYTYPE, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_UNKNOWN_CIPHER(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::StringView& cipherName)
@@ -1314,70 +1314,70 @@ JSC::EncodedJSValue CRYPTO_UNKNOWN_CIPHER(JSC::ThrowScope& throwScope, JSC::JSGl
     UNUSED_PARAM(cipherName);
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_UNKNOWN_CIPHER, "Unknown cipher"_s));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INVALID_AUTH_TAG(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::String& message)
 {
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_AUTH_TAG, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INVALID_IV(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
 {
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_IV, "Invalid initialization vector"_s));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_UNSUPPORTED_OPERATION(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, WTF::ASCIILiteral message)
 {
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_UNSUPPORTED_OPERATION, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_UNSUPPORTED_OPERATION(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
 {
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_UNSUPPORTED_OPERATION, "Unsupported crypto operation"_s));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INVALID_KEYLEN(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
 {
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_KEYLEN, "Invalid key length"_s));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INVALID_STATE(JSC::ThrowScope& scope, JSC::JSGlobalObject* globalObject, WTF::ASCIILiteral message)
 {
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_STATE, message));
     scope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INVALID_MESSAGELEN(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
 {
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_MESSAGELEN, "Invalid message length"_s));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue MISSING_ARGS(JSC::ThrowScope& scope, JSC::JSGlobalObject* globalObject, WTF::ASCIILiteral message)
 {
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_MISSING_ARGS, message));
     scope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_OPERATION_FAILED(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, ASCIILiteral message)
 {
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_OPERATION_FAILED, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INVALID_KEYPAIR(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
@@ -1385,7 +1385,7 @@ JSC::EncodedJSValue CRYPTO_INVALID_KEYPAIR(JSC::ThrowScope& throwScope, JSC::JSG
     auto message = "Invalid key pair"_s;
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_KEYPAIR, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_ECDH_INVALID_PUBLIC_KEY(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
@@ -1393,7 +1393,7 @@ JSC::EncodedJSValue CRYPTO_ECDH_INVALID_PUBLIC_KEY(JSC::ThrowScope& throwScope, 
     auto message = "Public key is not valid for specified curve"_s;
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_ECDH_INVALID_PUBLIC_KEY, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_ECDH_INVALID_FORMAT(ThrowScope& scope, JSGlobalObject* globalObject, const WTF::String& formatString)
@@ -1402,7 +1402,7 @@ JSC::EncodedJSValue CRYPTO_ECDH_INVALID_FORMAT(ThrowScope& scope, JSGlobalObject
     builder.append("Invalid ECDH format: "_s);
     builder.append(formatString);
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_ECDH_INVALID_FORMAT, builder.toString()));
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_JWK_UNSUPPORTED_CURVE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::String& curve)
@@ -1413,7 +1413,7 @@ JSC::EncodedJSValue CRYPTO_JWK_UNSUPPORTED_CURVE(JSC::ThrowScope& throwScope, JS
     builder.append('.');
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_JWK_UNSUPPORTED_CURVE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_JWK_UNSUPPORTED_CURVE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, ASCIILiteral message, const char* curveName)
@@ -1426,28 +1426,28 @@ JSC::EncodedJSValue CRYPTO_JWK_UNSUPPORTED_CURVE(JSC::ThrowScope& throwScope, JS
     builder.append('.');
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_JWK_UNSUPPORTED_CURVE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_JWK_UNSUPPORTED_KEY_TYPE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
 {
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE, "Unsupported JWK Key Type."_s));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INVALID_JWK(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
 {
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_JWK, "Invalid JWK data"_s));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INVALID_JWK(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, ASCIILiteral message)
 {
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_JWK, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_SIGN_KEY_REQUIRED(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
@@ -1455,7 +1455,7 @@ JSC::EncodedJSValue CRYPTO_SIGN_KEY_REQUIRED(JSC::ThrowScope& throwScope, JSC::J
     auto message = "No key provided to sign"_s;
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_SIGN_KEY_REQUIRED, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INVALID_KEY_OBJECT_TYPE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, JSValue received, WTF::ASCIILiteral expected)
@@ -1469,7 +1469,7 @@ JSC::EncodedJSValue CRYPTO_INVALID_KEY_OBJECT_TYPE(JSC::ThrowScope& throwScope, 
     builder.append(expected);
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INVALID_KEY_OBJECT_TYPE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, uint8_t receivedType, ASCIILiteral expected)
@@ -1492,7 +1492,7 @@ JSC::EncodedJSValue CRYPTO_INVALID_KEY_OBJECT_TYPE(JSC::ThrowScope& throwScope, 
     builder.append('.');
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INCOMPATIBLE_KEY_OPTIONS(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::StringView& receivedKeyEncoding, const WTF::String& expectedOperation)
@@ -1505,14 +1505,14 @@ JSC::EncodedJSValue CRYPTO_INCOMPATIBLE_KEY_OPTIONS(JSC::ThrowScope& throwScope,
     builder.append('.');
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INCOMPATIBLE_KEY_OPTIONS(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
 {
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS, "The selected key encoding is incompatible with the key type"_s));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INVALID_DIGEST(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::StringView& digest)
@@ -1522,7 +1522,7 @@ JSC::EncodedJSValue CRYPTO_INVALID_DIGEST(JSC::ThrowScope& throwScope, JSC::JSGl
     builder.append(digest);
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_DIGEST, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_INVALID_DIGEST(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, ASCIILiteral message, const WTF::StringView& digest)
@@ -1532,21 +1532,21 @@ JSC::EncodedJSValue CRYPTO_INVALID_DIGEST(JSC::ThrowScope& throwScope, JSC::JSGl
     builder.append(digest);
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_DIGEST, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_HASH_FINALIZED(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
 {
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_HASH_FINALIZED, "Digest already called"_s));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_HASH_UPDATE_FAILED(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
 {
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_HASH_UPDATE_FAILED, "Hash update failed"_s));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_TIMING_SAFE_EQUAL_LENGTH(JSC::ThrowScope& scope, JSC::JSGlobalObject* globalObject)
@@ -1554,7 +1554,7 @@ JSC::EncodedJSValue CRYPTO_TIMING_SAFE_EQUAL_LENGTH(JSC::ThrowScope& scope, JSC:
     auto message = "Input buffers must have the same byte length"_s;
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH, message));
     scope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue CRYPTO_UNKNOWN_DH_GROUP(JSC::ThrowScope& scope, JSGlobalObject* globalObject)
@@ -1562,21 +1562,21 @@ JSC::EncodedJSValue CRYPTO_UNKNOWN_DH_GROUP(JSC::ThrowScope& scope, JSGlobalObje
     auto message = "Unknown DH group"_s;
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_UNKNOWN_DH_GROUP, message));
     scope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue OSSL_EVP_INVALID_DIGEST(JSC::ThrowScope& scope, JSC::JSGlobalObject* globalObject)
 {
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_OSSL_EVP_INVALID_DIGEST, "Invalid digest used"_s));
     scope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue MISSING_PASSPHRASE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, WTF::ASCIILiteral message)
 {
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_MISSING_PASSPHRASE, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue KEY_GENERATION_JOB_FAILED(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
@@ -1584,7 +1584,7 @@ JSC::EncodedJSValue KEY_GENERATION_JOB_FAILED(JSC::ThrowScope& throwScope, JSC::
     auto message = "Key generation job failed"_s;
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_KEY_GENERATION_JOB_FAILED, message));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue INCOMPATIBLE_OPTION_PAIR(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, ASCIILiteral opt1, ASCIILiteral opt2)
@@ -1598,7 +1598,7 @@ JSC::EncodedJSValue INCOMPATIBLE_OPTION_PAIR(JSC::ThrowScope& throwScope, JSC::J
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INCOMPATIBLE_OPTION_PAIR, builder.toString()));
     throwScope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue MISSING_OPTION(JSC::ThrowScope& scope, JSC::JSGlobalObject* globalObject, ASCIILiteral message)
@@ -1608,7 +1608,7 @@ JSC::EncodedJSValue MISSING_OPTION(JSC::ThrowScope& scope, JSC::JSGlobalObject* 
     builder.append(" is required"_s);
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_MISSING_OPTION, builder.toString()));
     scope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue INVALID_MIME_SYNTAX(JSC::ThrowScope& scope, JSC::JSGlobalObject* globalObject, const String& part, const String& input, int position)
@@ -1627,14 +1627,14 @@ JSC::EncodedJSValue INVALID_MIME_SYNTAX(JSC::ThrowScope& scope, JSC::JSGlobalObj
 
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_MIME_SYNTAX, builder.toString()));
     scope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 EncodedJSValue CLOSED_MESSAGE_PORT(ThrowScope& scope, JSGlobalObject* globalObject)
 {
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CLOSED_MESSAGE_PORT, "Cannot send data on closed MessagePort"_s));
     scope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue INVALID_THIS(JSC::ThrowScope& scope, JSC::JSGlobalObject* globalObject, ASCIILiteral expectedType)
@@ -1644,14 +1644,14 @@ JSC::EncodedJSValue INVALID_THIS(JSC::ThrowScope& scope, JSC::JSGlobalObject* gl
     builder.append(expectedType);
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_THIS, builder.toString()));
     scope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 JSC::EncodedJSValue DLOPEN_DISABLED(JSC::ThrowScope& scope, JSC::JSGlobalObject* globalObject, ASCIILiteral message)
 {
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_DLOPEN_DISABLED, message));
     scope.release();
-    return {};
+    return JSC::JSValue::encode(JSC::JSValue());
 }
 
 } // namespace ERR
