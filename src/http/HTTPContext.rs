@@ -329,12 +329,12 @@ impl<const SSL: bool> HTTPContext<SSL> {
     /// `ptr` is the *value* stored in the socket ext (the packed
     /// `ActiveSocket` tagged pointer), already dereferenced by
     /// `NsHandler` before reaching `Handler.on*`. No second deref.
-    fn get_tagged(ptr: *mut c_void) -> ActiveSocket<SSL> {
-        ActiveSocket::<SSL>::from(Some(ptr))
+    fn get_tagged(bits: u64) -> ActiveSocket<SSL> {
+        ActiveSocket::<SSL>::from_bits(bits)
     }
 
     pub(crate) fn get_tagged_from_socket(socket: HTTPSocket<SSL>) -> ActiveSocket<SSL> {
-        if let Some(slot) = socket.ext::<*mut c_void>() {
+        if let Some(slot) = socket.ext::<u64>() {
             // SAFETY: ext slot stores the ActiveSocket tagged-pointer word.
             return Self::get_tagged(unsafe { *slot });
         }
@@ -350,9 +350,9 @@ impl<const SSL: bool> HTTPContext<SSL> {
     /// only for closed sockets, in which case the write is a no-op.
     #[inline]
     pub(crate) fn set_socket_ext(socket: HTTPSocket<SSL>, tagged: ActiveSocket<SSL>) {
-        if let Some(slot) = socket.ext::<*mut c_void>() {
+        if let Some(slot) = socket.ext::<u64>() {
             // SAFETY: see INVARIANT above.
-            unsafe { *slot = tagged.ptr() };
+            unsafe { *slot = tagged.repr.as_u64() };
         }
     }
 
@@ -839,7 +839,7 @@ impl<const SSL: bool> HTTPContext<SSL> {
             .http_proxy
             .clone()
             .unwrap_or_else(|| client.url.clone());
-        let socket = HTTPSocket::<SSL>::connect_unix_group(
+        let socket = HTTPSocket::<SSL>::connect_unix_group_tagged(
             &mut self.group,
             Self::KIND,
             if SSL { self.secure } else { None },
@@ -850,7 +850,8 @@ impl<const SSL: bool> HTTPContext<SSL> {
                     .as_ptr()
                     .cast::<HTTPClient<'static>>(),
             )
-            .ptr(),
+            .repr
+            .as_u64(),
             false, // dont allow half-open sockets
         )?;
         client.allow_retry = false;
@@ -1021,7 +1022,7 @@ impl<const SSL: bool> HTTPContext<SSL> {
             }
         }
 
-        let socket = HTTPSocket::<SSL>::connect_group(
+        let socket = HTTPSocket::<SSL>::connect_group_tagged(
             &mut self.group,
             Self::KIND,
             if SSL { self.secure } else { None },
@@ -1033,7 +1034,8 @@ impl<const SSL: bool> HTTPContext<SSL> {
                     .as_ptr()
                     .cast::<HTTPClient<'static>>(),
             )
-            .ptr(),
+            .repr
+            .as_u64(),
             false,
         )?;
         client.allow_retry = false;
@@ -1120,12 +1122,12 @@ impl<const SSL: bool> Drop for HTTPContext<SSL> {
 pub struct Handler<const SSL: bool>;
 
 impl<const SSL: bool> Handler<SSL> {
-    pub fn on_open(ptr: *mut c_void, socket: HTTPSocket<SSL>) {
-        let active = HTTPContext::<SSL>::get_tagged(ptr);
+    pub fn on_open(bits: u64, socket: HTTPSocket<SSL>) {
+        let active = HTTPContext::<SSL>::get_tagged(bits);
         bun_core::scoped_log!(
             HTTPContext,
-            "Handler::on_open ptr={:p} tag={} socket={:p}",
-            ptr,
+            "Handler::on_open bits=0x{:016x} tag={} socket={:p}",
+            bits,
             active.tag(),
             socket.socket.get().unwrap_or(core::ptr::null_mut()),
         );
@@ -1145,7 +1147,7 @@ impl<const SSL: bool> Handler<SSL> {
     }
 
     pub fn on_handshake(
-        ptr: *mut c_void,
+        bits: u64,
         socket: HTTPSocket<SSL>,
         success: i32,
         ssl_error: uws::us_bun_verify_error_t,
@@ -1154,7 +1156,7 @@ impl<const SSL: bool> Handler<SSL> {
 
         let handshake_error = HTTPCertError::from_verify_error(ssl_error);
 
-        let active = HTTPContext::<SSL>::get_tagged(ptr);
+        let active = HTTPContext::<SSL>::get_tagged(bits);
         if let Some(client) = active.client_mut() {
             // handshake completed but we may have ssl errors
             client.flags.did_have_handshaking_error = handshake_error.error_no != 0;
@@ -1223,8 +1225,8 @@ impl<const SSL: bool> Handler<SSL> {
         HTTPContext::<SSL>::terminate_socket(socket);
     }
 
-    pub fn on_close(ptr: *mut c_void, socket: HTTPSocket<SSL>, _: c_int, _: Option<*mut c_void>) {
-        let tagged = HTTPContext::<SSL>::get_tagged(ptr);
+    pub fn on_close(bits: u64, socket: HTTPSocket<SSL>, _: c_int, _: Option<*mut c_void>) {
+        let tagged = HTTPContext::<SSL>::get_tagged(bits);
         HTTPContext::<SSL>::mark_socket_as_dead(socket);
 
         if let Some(client) = tagged.client_mut() {
@@ -1257,8 +1259,8 @@ impl<const SSL: bool> Handler<SSL> {
         debug_assert!(ok);
     }
 
-    pub fn on_data(ptr: *mut c_void, socket: HTTPSocket<SSL>, buf: &[u8]) {
-        let tagged = HTTPContext::<SSL>::get_tagged(ptr);
+    pub fn on_data(bits: u64, socket: HTTPSocket<SSL>, buf: &[u8]) {
+        let tagged = HTTPContext::<SSL>::get_tagged(bits);
         if let Some(client) = tagged.client_mut() {
             return client.on_data::<SSL>(buf, client.get_ssl_ctx::<SSL>(), socket);
         } else if let Some(session) = tagged.session_mut() {
@@ -1297,8 +1299,8 @@ impl<const SSL: bool> Handler<SSL> {
         HTTPContext::<SSL>::terminate_socket(socket);
     }
 
-    pub fn on_writable(ptr: *mut c_void, socket: HTTPSocket<SSL>) {
-        let tagged = HTTPContext::<SSL>::get_tagged(ptr);
+    pub fn on_writable(bits: u64, socket: HTTPSocket<SSL>) {
+        let tagged = HTTPContext::<SSL>::get_tagged(bits);
         if let Some(client) = tagged.client_mut() {
             return client.on_writable::<false, SSL>(socket);
         } else if let Some(session) = tagged.session_mut() {
@@ -1312,8 +1314,8 @@ impl<const SSL: bool> Handler<SSL> {
         }
     }
 
-    pub fn on_long_timeout(ptr: *mut c_void, socket: HTTPSocket<SSL>) {
-        let tagged = HTTPContext::<SSL>::get_tagged(ptr);
+    pub fn on_long_timeout(bits: u64, socket: HTTPSocket<SSL>) {
+        let tagged = HTTPContext::<SSL>::get_tagged(bits);
         if let Some(client) = tagged.client_mut() {
             return client.on_timeout::<SSL>(socket);
         }
@@ -1328,15 +1330,15 @@ impl<const SSL: bool> Handler<SSL> {
     /// Short-tick (seconds-granularity) idle timer. Same handling as
     /// [`on_long_timeout`]; `HTTPClient::set_timeout` routes to whichever
     /// timer suits the configured duration, so both must dispatch.
-    pub fn on_timeout(ptr: *mut c_void, socket: HTTPSocket<SSL>) {
-        Self::on_long_timeout(ptr, socket);
+    pub fn on_timeout(bits: u64, socket: HTTPSocket<SSL>) {
+        Self::on_long_timeout(bits, socket);
     }
 
-    pub fn on_connect_error(ptr: *mut c_void, socket: HTTPSocket<SSL>, _: c_int) {
+    pub fn on_connect_error(bits: u64, socket: HTTPSocket<SSL>, _: c_int) {
         // Read before the socket is marked dead: uSockets keeps the
         // connecting socket alive for the whole dispatch.
         let dns_error = socket.dns_error();
-        let tagged = HTTPContext::<SSL>::get_tagged(ptr);
+        let tagged = HTTPContext::<SSL>::get_tagged(bits);
         HTTPContext::<SSL>::mark_tagged_socket_as_dead(socket, tagged);
         if let Some(client) = tagged.client_mut() {
             client.on_connect_error(dns_error);
@@ -1349,7 +1351,7 @@ impl<const SSL: bool> Handler<SSL> {
         // us_connecting_socket_close is always called internally by uSockets
     }
 
-    pub fn on_end(ptr: *mut c_void, socket: HTTPSocket<SSL>) {
+    pub fn on_end(bits: u64, socket: HTTPSocket<SSL>) {
         // TCP fin must be closed, but we must keep the original tagged
         // pointer so that their onClose callback is called.
         //
@@ -1358,7 +1360,7 @@ impl<const SSL: bool> Handler<SSL> {
         // 2. HTTP Client socket: it might need to be retried
         // 3. HTTP/2 session: fail every stream on it
         // 4. Dead socket: it is already marked as dead
-        let tagged = HTTPContext::<SSL>::get_tagged(ptr);
+        let tagged = HTTPContext::<SSL>::get_tagged(bits);
         HTTPContext::<SSL>::mark_tagged_socket_as_dead(socket, tagged);
         // An idle (pooled keep-alive) socket's FIN is answered with a graceful
         // close so well-behaved servers don't observe ECONNRESET for

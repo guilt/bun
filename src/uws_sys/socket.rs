@@ -857,6 +857,105 @@ impl<const IS_SSL: bool> NewSocketHandler<IS_SSL> {
         })
     }
 
+    /// Like [`connect_group`] but stores the raw `TaggedPtr` bits (u64) in
+    /// the ext slot instead of a pointer. On i586, `*mut T` is 4 bytes and
+    /// cannot hold a `TaggedPtr` (u64 with tag in bits 49-63). This variant
+    /// always uses an 8-byte ext slot so the full tagged-pointer value fits.
+    pub fn connect_group_tagged(
+        g: &mut SocketGroup,
+        kind: SocketKind,
+        ssl_ctx: Option<*mut SslCtx>,
+        raw_host: &[u8],
+        port: c_int,
+        owner: u64,
+        allow_half_open: bool,
+    ) -> Result<Self, ConnectError> {
+        let opts: c_int = if allow_half_open {
+            LIBUS_SOCKET_ALLOW_HALF_OPEN
+        } else {
+            0
+        };
+        let host =
+            if raw_host.len() > 1 && raw_host[0] == b'[' && raw_host[raw_host.len() - 1] == b']' {
+                &raw_host[1..raw_host.len() - 1]
+            } else {
+                raw_host
+            };
+        let mut stack = [0u8; 256];
+        let heap: Vec<u8>;
+        let host_z: &core::ffi::CStr = if host.len() < stack.len() {
+            stack[..host.len()].copy_from_slice(host);
+            stack[host.len()] = 0;
+            ZStr::from_buf(&stack, host.len()).as_cstr()
+        } else {
+            heap = {
+                let mut v = Vec::with_capacity(host.len() + 1);
+                v.extend_from_slice(host);
+                v.push(0);
+                v
+            };
+            ZStr::from_slice_with_nul(&heap).as_cstr()
+        };
+
+        let ext_size = size_of::<u64>() as c_int;
+        match g.connect(kind, ssl_ctx, host_z, port, None, opts, ext_size) {
+            ConnectResult::Failed => Err(ConnectError::FailedToOpenSocket),
+            ConnectResult::Socket(s) => {
+                let slot = sock(s).ext::<u64>();
+                bun_core::scoped_log!(
+                    uws,
+                    "connect_group_tagged ext write socket={:p} owner=0x{:016x} (kind={:?})",
+                    s,
+                    owner,
+                    kind
+                );
+                *slot = owner;
+                Ok(Self {
+                    socket: InternalSocket::Connected(s),
+                })
+            }
+            ConnectResult::Connecting(cs) => {
+                let slot = conn(cs).ext::<u64>();
+                bun_core::scoped_log!(
+                    uws,
+                    "connect_group_tagged connecting ext write cs={:p} owner=0x{:016x} (kind={:?})",
+                    cs,
+                    owner,
+                    kind
+                );
+                *slot = owner;
+                Ok(Self {
+                    socket: InternalSocket::Connecting(cs),
+                })
+            }
+        }
+    }
+
+    /// Tagged-pointer variant of [`connect_unix_group`]; see [`connect_group_tagged`].
+    pub fn connect_unix_group_tagged(
+        g: &mut SocketGroup,
+        kind: SocketKind,
+        ssl_ctx: Option<*mut SslCtx>,
+        path: &[u8],
+        owner: u64,
+        allow_half_open: bool,
+    ) -> Result<Self, ConnectError> {
+        let opts: c_int = if allow_half_open {
+            LIBUS_SOCKET_ALLOW_HALF_OPEN
+        } else {
+            0
+        };
+        let ext_size = size_of::<u64>() as c_int;
+        let s = g.connect_unix(kind, ssl_ctx, path, opts, ext_size);
+        if s.is_null() {
+            return Err(ConnectError::FailedToOpenSocket);
+        }
+        *sock(s).ext::<u64>() = owner;
+        Ok(Self {
+            socket: InternalSocket::Connected(s),
+        })
+    }
+
     /// Move an open socket into a new group/kind, stashing `owner` in the ext.
     /// Replaces `Socket.adoptPtr`.
     ///

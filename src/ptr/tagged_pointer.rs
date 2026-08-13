@@ -53,6 +53,11 @@ impl TaggedPtr {
     }
 
     #[inline]
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
+
+    #[inline]
     pub fn to(self) -> *mut c_void {
         // Note: includes the tag bits in the high word. This is intentional:
         // round-tripping through `*anyopaque` preserves the tag.
@@ -259,6 +264,14 @@ impl<Ts: TypeList> TaggedPtrUnion<Ts> {
         // switch (data) { MIN_TAG...MAX_TAG => true, else => false }
         let d = self.repr.data();
         d >= Ts::MIN_TAG && d <= Ts::MAX_TAG
+    }
+
+    #[inline]
+    pub fn from_bits(bits: u64) -> Self {
+        Self {
+            repr: TaggedPtr::from(bits),
+            _types: PhantomData,
+        }
     }
 
     #[inline]

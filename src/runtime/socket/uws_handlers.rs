@@ -10,7 +10,6 @@
 
 use bun_ptr::ThisPtr;
 use core::ffi::{c_int, c_void};
-use core::ptr::NonNull;
 
 use bun_uws::{ConnectingSocket, NewSocketHandler};
 use bun_uws_sys::thunk;
@@ -752,7 +751,7 @@ pub struct HTTPClient<const SSL: bool>;
 type HttpH<const SSL: bool> = bun_http::http_context::Handler<SSL>;
 
 impl<const SSL: bool> VHandler for HTTPClient<SSL> {
-    type Ext = Option<NonNull<c_void>>;
+    type Ext = u64;
 
     const HAS_ON_OPEN: bool = true;
     const HAS_ON_DATA: bool = true;
@@ -768,63 +767,69 @@ impl<const SSL: bool> VHandler for HTTPClient<SSL> {
     fn on_open(ext: &mut Self::Ext, s: *mut us_socket_t, _is_client: bool, _ip: &[u8]) {
         // The word read out is a packed `ActiveSocket` tagged-pointer value,
         // not dereferenced here.
-        let Some(owner) = *ext else {
+        let owner_bits = *ext;
+        if owner_bits == 0 {
             bun_core::scoped_log!(
                 HTTPClientLog,
-                "HTTPClient::on_open socket={:p} ext=None (SILENT)",
+                "HTTPClient::on_open socket={:p} bits=0 (SILENT)",
                 s,
             );
             return
         };
         bun_core::scoped_log!(
             HTTPClientLog,
-            "HTTPClient::on_open socket={:p} ext=Some({:p}) decoded_tag={}",
+            "HTTPClient::on_open socket={:p} bits=0x{:016x} decoded_tag={}",
             s,
-            owner.as_ptr(),
-            bun_ptr::tagged_pointer::TaggedPtr::from(owner.as_ptr()).data(),
+            owner_bits,
+            bun_ptr::tagged_pointer::TaggedPtr::from(owner_bits as i64).data(),
         );
-        HttpH::<SSL>::on_open(owner.as_ptr(), wrap::<SSL>(s));
+        HttpH::<SSL>::on_open(owner_bits, wrap::<SSL>(s));
     }
     fn on_data(ext: &mut Self::Ext, s: *mut us_socket_t, data: &[u8]) {
-        let Some(owner) = *ext else { return };
-        HttpH::<SSL>::on_data(owner.as_ptr(), wrap::<SSL>(s), data);
+        let owner_bits = *ext;
+        if owner_bits == 0 { return };
+        HttpH::<SSL>::on_data(owner_bits, wrap::<SSL>(s), data);
     }
     fn on_writable(ext: &mut Self::Ext, s: *mut us_socket_t) {
-        let Some(owner) = *ext else { return };
-        HttpH::<SSL>::on_writable(owner.as_ptr(), wrap::<SSL>(s));
+        let owner_bits = *ext;
+        if owner_bits == 0 { return };
+        HttpH::<SSL>::on_writable(owner_bits, wrap::<SSL>(s));
     }
     fn on_close(ext: &mut Self::Ext, s: *mut us_socket_t, code: i32, reason: Option<*mut c_void>) {
-        let Some(owner) = *ext else { return };
-        HttpH::<SSL>::on_close(owner.as_ptr(), wrap::<SSL>(s), code, reason);
+        let owner_bits = *ext;
+        if owner_bits == 0 { return };
+        HttpH::<SSL>::on_close(owner_bits, wrap::<SSL>(s), code, reason);
     }
     fn on_timeout(ext: &mut Self::Ext, s: *mut us_socket_t) {
-        let Some(owner) = *ext else { return };
-        HttpH::<SSL>::on_timeout(owner.as_ptr(), wrap::<SSL>(s));
+        let owner_bits = *ext;
+        if owner_bits == 0 { return };
+        HttpH::<SSL>::on_timeout(owner_bits, wrap::<SSL>(s));
     }
     fn on_long_timeout(ext: &mut Self::Ext, s: *mut us_socket_t) {
-        let Some(owner) = *ext else { return };
-        HttpH::<SSL>::on_long_timeout(owner.as_ptr(), wrap::<SSL>(s));
+        let owner_bits = *ext;
+        if owner_bits == 0 { return };
+        HttpH::<SSL>::on_long_timeout(owner_bits, wrap::<SSL>(s));
     }
     fn on_end(ext: &mut Self::Ext, s: *mut us_socket_t) {
-        let Some(owner) = *ext else { return };
-        HttpH::<SSL>::on_end(owner.as_ptr(), wrap::<SSL>(s));
+        let owner_bits = *ext;
+        if owner_bits == 0 { return };
+        HttpH::<SSL>::on_end(owner_bits, wrap::<SSL>(s));
     }
     fn on_connect_error(ext: &mut Self::Ext, s: *mut us_socket_t, code: i32) {
         // Close before notify — see PtrHandler::on_connect_error. SEMI_SOCKET
         // close skips dispatch, so the tagged owner survives the close.
-        let owner = *ext;
+        let owner_bits = *ext;
         // `us_socket_t` is an `opaque_ffi!` ZST — `opaque_mut` is the safe
         // deref (`s` is a live socket passed by the trampoline).
         us_socket_t::opaque_mut(s).close(CloseCode::failure);
-        let Some(owner) = owner else { return };
-        HttpH::<SSL>::on_connect_error(owner.as_ptr(), wrap::<SSL>(s), code);
+        if owner_bits == 0 { return };
+        HttpH::<SSL>::on_connect_error(owner_bits, wrap::<SSL>(s), code);
     }
     fn on_connecting_error(cs: *mut ConnectingSocket, code: i32) {
-        let Some(owner) = *ConnectingSocket::opaque_mut(cs).ext::<Option<NonNull<c_void>>>() else {
-            return;
-        };
+        let owner_bits = *ConnectingSocket::opaque_mut(cs).ext::<u64>();
+        if owner_bits == 0 { return };
         HttpH::<SSL>::on_connect_error(
-            owner.as_ptr(),
+            owner_bits,
             NewSocketHandler::<SSL>::from_connecting(cs),
             code,
         );
@@ -835,8 +840,9 @@ impl<const SSL: bool> VHandler for HTTPClient<SSL> {
         ok: bool,
         err: us_bun_verify_error_t,
     ) {
-        let Some(owner) = *ext else { return };
-        HttpH::<SSL>::on_handshake(owner.as_ptr(), wrap::<SSL>(s), ok as i32, err);
+        let owner_bits = *ext;
+        if owner_bits == 0 { return };
+        HttpH::<SSL>::on_handshake(owner_bits, wrap::<SSL>(s), ok as i32, err);
     }
 }
 
