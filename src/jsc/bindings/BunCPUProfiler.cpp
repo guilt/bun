@@ -11,6 +11,16 @@
 #include <algorithm>
 #include <limits>
 
+#if ENABLE(SAMPLING_PROFILER)
+#include <JavaScriptCore/SamplingProfiler.h>
+#include <JavaScriptCore/ScriptExecutable.h>
+#include <JavaScriptCore/FunctionExecutable.h>
+#include <JavaScriptCore/SourceProvider.h>
+#include <wtf/Stopwatch.h>
+#include <wtf/JSONValues.h>
+#include <wtf/URL.h>
+#endif
+
 extern "C" void Bun__startCPUProfiler(JSC::VM* vm);
 extern "C" void Bun__stopCPUProfiler(JSC::VM* vm, BunString* outJSON, BunString* outText);
 extern "C" void Bun__setSamplingInterval(int intervalMicroseconds);
@@ -39,14 +49,6 @@ bool isCPUProfilerRunning()
 }
 
 #if ENABLE(SAMPLING_PROFILER)
-
-#include <JavaScriptCore/SamplingProfiler.h>
-#include <JavaScriptCore/ScriptExecutable.h>
-#include <JavaScriptCore/FunctionExecutable.h>
-#include <JavaScriptCore/SourceProvider.h>
-#include <wtf/Stopwatch.h>
-#include <wtf/JSONValues.h>
-#include <wtf/URL.h>
 
 void startCPUProfiler(JSC::VM& vm)
 {

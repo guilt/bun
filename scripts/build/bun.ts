@@ -334,6 +334,12 @@ export function emitBun(n: Ninja, cfg: Config, sources: Sources): BunOutput {
     cxxSources.push(rescle, rescleBinding);
     noPchSources.add(rescle);
     noPchSources.add(rescleBinding);
+
+    // WSAPoll → select() polyfill. Rust (bun_core::util::is_writable) calls
+    // bun_wsapoll_stub on all Windows — WSAPoll doesn't exist on XP, and on
+    // x64 we don't import WSAPoll at all (the stub IS the implementation).
+    const wsapollStub = resolve(cfg.cwd, "src/jsc/bindings/wsapoll_stub.cpp");
+    cxxSources.push(wsapollStub);
   }
 
   // V8 shim sources are already globbed via the unified source system.
@@ -346,9 +352,12 @@ export function emitBun(n: Ninja, cfg: Config, sources: Sources): BunOutput {
     cxxSources.push(apisetStubs);
     noPchSources.add(apisetStubs);
 
-    // WSAPoll → select() polyfill with delay-load hook for XP compat.
-    const wsapollStub = resolve(cfg.cwd, "src/jsc/bindings/wsapoll_stub.cpp");
-    cxxSources.push(wsapollStub);
+    // Win9x i586 JSC symbol stubs (jsc_llint_begin/end, Wasm streaming
+    // addBytes) — the x64 prebuilt WebKit already defines these, so they must
+    // NOT be compiled into x64 builds (glob exclude in glob-sources.ts).
+    const win9xStubs = resolve(cfg.cwd, "src/jsc/bindings/win9x_stubs.cpp");
+    cxxSources.push(win9xStubs);
+    noPchSources.add(win9xStubs);
 
     // XP compat: stubs for all missing Vista+ APIs (SRWLock, ConditionVariable,
     // etc.). The __imp_ data symbols in xp_win9x_imports.asm redirect the

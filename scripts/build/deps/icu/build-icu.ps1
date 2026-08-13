@@ -65,6 +65,71 @@ if ($env:VSINSTALLDIR -eq $null) {
 
 $null = mkdir $OutputDir -ErrorAction SilentlyContinue
 
+# --------------------------------------------------------------------------
+# Trim PATH for MSBuild custom build steps (makedata's nmake).
+# MSBuild prepends its own VC/SDK dirs to PATH, and cmd.exe refuses to
+# resolve ANY external command once %PATH% exceeds 8191 chars. With the long
+# PATH inherited from the dev shell, the CustomBuild step's PATH balloons past
+# the limit and every nmake/where/findstr call fails with "not recognized"
+# (MSB8066 / exit code 9009). Replace PATH with a short, self-contained list
+# covering: System32 (+ PowerShell for ICU's >8190-char command fallback), the
+# ICU bin dir (the data tools need icuuc*/icuin* DLLs at runtime), the MSVC
+# bin dirs (nmake/cl), Git (perl), EXTDEV (py), and the Windows SDK bin.
+# --------------------------------------------------------------------------
+function Get-TrimmedPath {
+    $systemRoot = $env:SystemRoot
+    if (-not $systemRoot) { $systemRoot = "C:\Windows" }
+    $paths = @(
+        "$systemRoot\System32",
+        "$systemRoot",
+        "$systemRoot\System32\WindowsPowerShell\v1.0"
+    )
+
+    # ICU bin dir (parent of source/) — the DLL the data tools load at runtime.
+    $prefixBin = Join-Path (Split-Path -Parent $ICU_SOURCE_DIR) "bin"
+    if (Test-Path $prefixBin) { $paths += $prefixBin }
+
+    # MSVC toolset bin dirs (nmake.exe, cl.exe).
+    if ($env:VCToolsInstallDir) {
+        $paths += (Join-Path $env:VCToolsInstallDir "bin\Hostx64\x64")
+        $paths += (Join-Path $env:VCToolsInstallDir "bin\Hostx86\x86")
+    } else {
+        $msvcRoot = Join-Path (Join-Path (Join-Path $env:ProgramFiles "Microsoft Visual Studio\2022") "Community\VC\Tools\MSVC")
+        if (Test-Path $msvcRoot) {
+            $ver = Get-ChildItem $msvcRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1
+            if ($ver) {
+                $paths += (Join-Path $ver.FullName "bin\Hostx64\x64")
+                $paths += (Join-Path $ver.FullName "bin\Hostx86\x86")
+            }
+        }
+    }
+
+    # Git for Windows (perl.exe for some ICU build steps).
+    $gitUsr = Join-Path $env:ProgramFiles "Git\usr\bin"
+    if (Test-Path $gitUsr) { $paths += $gitUsr }
+
+    # Python launcher (py.exe).
+    $extdevBin = "D:\WS\EXTDEV\Bin"
+    if (Test-Path $extdevBin) { $paths += $extdevBin }
+
+    # Visual Studio common tools (vsdevcmd etc.).
+    if ($env:VSINSTALLDIR) { $paths += (Join-Path $env:VSINSTALLDIR "Common7\IDE") }
+
+    # Windows SDK bin (rc.exe etc. for tool builds).
+    $kitsBin = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
+    if (Test-Path $kitsBin) {
+        $sdkVer = Get-ChildItem $kitsBin -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+        if ($sdkVer) {
+            $paths += (Join-Path $sdkVer.FullName "x64")
+            $paths += $sdkVer.FullName
+        }
+    }
+
+    return ($paths -join ";")
+}
+
+$FullPath = $env:PATH
+
 if ($SourceDir) {
     if (-not (Test-Path $SourceDir)) {
         throw "SourceDir not found: $SourceDir"
@@ -97,7 +162,18 @@ if ($Platform -eq "x64") {
 }
 
 # ClangCL for stage 2 so -march= limits codegen (MSVC /arch:SSE2 is a no-op on x64).
-$ToolsetArg = if ($Platform -eq "x64") { @("/p:PlatformToolset=ClangCL") } else { @() }
+# Fall back to the default MSVC toolset when the ClangCL toolset isn't installed
+# (VS "C++ Clang tools for Windows" component). The -march=nehalem flag is a
+# perf nicety; correctness is identical with MSVC.
+$vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+$vsPath = if (Test-Path $vswhere) { & $vswhere -latest -property installationPath } else { "" }
+$clangClToolset = if ($vsPath) { Join-Path $vsPath "MSBuild\Microsoft\VC\v170\Platforms\x64\PlatformToolsets\ClangCL" } else { "" }
+$haveClangCL = $Platform -eq "x64" -and (Test-Path $clangClToolset)
+$ToolsetArg = if ($haveClangCL) { @("/p:PlatformToolset=ClangCL") } else { @() }
+if ($Platform -eq "x64" -and -not $haveClangCL) {
+    Write-Host ":: WARNING: ClangCL toolset not found; building ICU with the default MSVC toolset"
+    $ArchFlag = ""
+}
 $MsbPlatform = if ($Platform -eq "x86") { "Win32" } else { $Platform }
 
 # --- Function to patch vcxproj files for static library build with /MT ---
@@ -199,8 +275,9 @@ $runtimePatched = @(
     "stubdata\stubdata.vcxproj",
     "allinone\Build.Windows.ProjectConfiguration.props"
 )
-if (Test-Path (Join-Path $ICU_SOURCE_DIR ".git")) {
-    $resetArgs = @("checkout", "--") + ($runtimePatched | ForEach-Object { Join-Path $ICU_SOURCE_DIR $_ })
+$inGitWorkTree = git -C $ICU_SOURCE_DIR rev-parse --is-inside-work-tree 2>&1 | Out-String
+if ($inGitWorkTree -match "true") {
+    $resetArgs = @("-C", $ICU_SOURCE_DIR, "checkout", "--") + ($runtimePatched | ForEach-Object { Join-Path $ICU_SOURCE_DIR $_ })
     & git @resetArgs 2>&1 | Out-Null
     Get-ChildItem (Join-Path $ICU_SOURCE_DIR "common"), (Join-Path $ICU_SOURCE_DIR "i18n"), (Join-Path $ICU_SOURCE_DIR "stubdata") -Filter "*.vcxproj.bak" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 }
@@ -273,7 +350,16 @@ $buildArgs = @(
     "/v:normal"
 )
 
-& $msbuildPath $buildArgs
+# makedata's CustomBuild step shells out to NMAKE. cmd.exe stops resolving any
+# external command once %PATH% exceeds 8191 chars, and MSBuild's long inherited
+# PATH (plus its own prepends) blows past that → "nmake is not recognized"
+# (MSB8066 / exit code 9009). Run makedata under the trimmed PATH.
+$env:PATH = Get-TrimmedPath
+try {
+    & $msbuildPath $buildArgs
+} finally {
+    $env:PATH = $FullPath
+}
 
 if ($LASTEXITCODE -ne 0) {
     throw "MSBuild failed for makedata with exit code $LASTEXITCODE"
@@ -290,7 +376,12 @@ Write-Host ":: Built makedata successfully"
 # up-to-date, so this only re-runs pkgdata → sicudt.lib.
 $env:ICU_PACKAGE_MODE = "-m static"
 Write-Host ":: STAGE 1a: Rebuilding ICU data as static library (sicudt.lib)..."
-& $msbuildPath $buildArgs
+$env:PATH = Get-TrimmedPath
+try {
+    & $msbuildPath $buildArgs
+} finally {
+    $env:PATH = $FullPath
+}
 if ($LASTEXITCODE -ne 0) {
     throw "MSBuild failed for makedata (static) with exit code $LASTEXITCODE"
 }
@@ -321,7 +412,12 @@ if ((Test-Path $icupkg) -and $datFile) {
     Move-Item -Force $filtered $datFile.FullName
     # Force makedata to repackage from the filtered .dat.
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $ICU_SOURCE_DIR "data\out")
-    & $msbuildPath $buildArgs
+    $env:PATH = Get-TrimmedPath
+    try {
+        & $msbuildPath $buildArgs
+    } finally {
+        $env:PATH = $FullPath
+    }
     if ($LASTEXITCODE -ne 0) { throw "MSBuild failed for makedata (filtered) with exit code $LASTEXITCODE" }
     Write-Host ":: Rebuilt makedata with filtered ICU data"
 } else {

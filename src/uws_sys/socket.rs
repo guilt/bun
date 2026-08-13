@@ -802,13 +802,29 @@ impl<const IS_SSL: bool> NewSocketHandler<IS_SSL> {
         match g.connect(kind, ssl_ctx, host_z, port, None, opts, ext_size) {
             ConnectResult::Failed => Err(ConnectError::FailedToOpenSocket),
             ConnectResult::Socket(s) => {
-                *sock(s).ext::<Option<NonNull<Owner>>>() = NonNull::new(owner);
+                let slot = sock(s).ext::<Option<NonNull<Owner>>>();
+                bun_core::scoped_log!(
+                    uws,
+                    "connect_group ext write socket={:p} owner={:p} (kind={:?})",
+                    s,
+                    owner,
+                    kind
+                );
+                *slot = NonNull::new(owner);
                 Ok(Self {
                     socket: InternalSocket::Connected(s),
                 })
             }
             ConnectResult::Connecting(cs) => {
-                *conn(cs).ext::<Option<NonNull<Owner>>>() = NonNull::new(owner);
+                let slot = conn(cs).ext::<Option<NonNull<Owner>>>();
+                bun_core::scoped_log!(
+                    uws,
+                    "connect_group connecting ext write cs={:p} owner={:p} (kind={:?})",
+                    cs,
+                    owner,
+                    kind
+                );
+                *slot = NonNull::new(owner);
                 Ok(Self {
                     socket: InternalSocket::Connecting(cs),
                 })

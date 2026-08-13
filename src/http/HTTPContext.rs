@@ -1122,6 +1122,13 @@ pub struct Handler<const SSL: bool>;
 impl<const SSL: bool> Handler<SSL> {
     pub fn on_open(ptr: *mut c_void, socket: HTTPSocket<SSL>) {
         let active = HTTPContext::<SSL>::get_tagged(ptr);
+        bun_core::scoped_log!(
+            HTTPContext,
+            "Handler::on_open ptr={:p} tag={} socket={:p}",
+            ptr,
+            active.tag(),
+            socket.socket.get().unwrap_or(core::ptr::null_mut()),
+        );
         if let Some(client) = active.client_mut() {
             match client.on_open::<SSL>(socket) {
                 Ok(_) => return,

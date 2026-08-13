@@ -26,6 +26,8 @@ use bun_jsc::ipc as IPC;
 use bun_sql_jsc::mysql;
 use bun_sql_jsc::postgres;
 
+bun_core::declare_scope!(HTTPClientLog, visible);
+
 /// Some consumer methods are `bun.JSError!void` (they can throw into JS),
 /// some are plain `void`. The old `configure()` trampolines hand-unrolled the
 /// catch per call site; here we do it once. JS errors are already on the
@@ -766,7 +768,21 @@ impl<const SSL: bool> VHandler for HTTPClient<SSL> {
     fn on_open(ext: &mut Self::Ext, s: *mut us_socket_t, _is_client: bool, _ip: &[u8]) {
         // The word read out is a packed `ActiveSocket` tagged-pointer value,
         // not dereferenced here.
-        let Some(owner) = *ext else { return };
+        let Some(owner) = *ext else {
+            bun_core::scoped_log!(
+                HTTPClientLog,
+                "HTTPClient::on_open socket={:p} ext=None (SILENT)",
+                s,
+            );
+            return
+        };
+        bun_core::scoped_log!(
+            HTTPClientLog,
+            "HTTPClient::on_open socket={:p} ext=Some({:p}) decoded_tag={}",
+            s,
+            owner.as_ptr(),
+            bun_ptr::tagged_pointer::TaggedPtr::from(owner.as_ptr()).data(),
+        );
         HttpH::<SSL>::on_open(owner.as_ptr(), wrap::<SSL>(s));
     }
     fn on_data(ext: &mut Self::Ext, s: *mut us_socket_t, data: &[u8]) {

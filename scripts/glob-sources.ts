@@ -87,6 +87,7 @@ const patterns = {
   cxx: {
     exclude: [
       "src/jsc/bindings/win9x_apiset_stubs.cpp",
+      "src/jsc/bindings/win9x_stubs.cpp",
       "src/jsc/bindings/wsapoll_stub.cpp",
       "src/jsc/bindings/xp_compat.cpp",
     ],

@@ -455,6 +455,7 @@ function parseArgs(argv: string[]): CliArgs {
     "buildType",
     "mode",
     "webkit",
+    "icu",
     "buildDir",
     "cacheDir",
     "nodejsVersion",
@@ -584,6 +585,7 @@ Options:
                           on/off/true/false/yes/no/1/0.
                           Fields: asan, lto, assertions, logs, baseline,
                                   canary, valgrind, webkit (prebuilt|local),
+                                  icu (prebuilt|local),
                                   buildDir, mode (full|cpp-only|link-only),
                                   unifiedSources, timeTrace, os, arch, abi,
                                   winsysroot (Windows cross-compile SDK root)

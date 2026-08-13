@@ -660,6 +660,74 @@ common/i18n are rebuilt static `/MT`. Outputs land in
 `build/<profile>/deps/icu/lib/{icudt,icuin,icuuc}.lib` and WebKit's cmake reads
 `ICU_ROOT` from there.
 
+## Native x64 debug builds (local WebKit + local ICU)
+
+The machine-wide x64 build (`build/debug`, `build/release`) must also use the
+`local` WebKit + `local` ICU pair — the **prebuilt** WebKit tarballs at the
+pinned `WEBKIT_VERSION` bundle ICU 73, which cannot link against the local
+ICU 78 (`lib/*` export only `_78` symbols; the prebuilt ICU 78.3 import libs
+live under `lib64/`, and its `lib/` is empty). The local pair is already the
+default for i586; on x64 it is the *only* working configuration:
+
+```powershell
+# Must run inside an x64 VS developer shell (vcvars64), else the nested
+# cmake try-compiles fail with "undefined symbol: mainCRTStartup" (the shell's
+# LIB/INCLUDE point at the x86 CRT).
+bun scripts/build.ts --profile=debug --webkit=local --icu=local
+# or the release equivalent:
+bun scripts/build.ts --profile=release --webkit=local --icu=local
+```
+
+Why the shell matters: `scripts/build.ts` re-execs into the VS dev shell only
+when `VSINSTALLDIR` is unset. A dev shell launched for x86 (or a plain
+terminal with the machine-wide x86 `LIB`/`INCLUDE`) keeps the x86 CRT paths,
+and WebKit's x64 cmake `try_compile` then fails at link with
+`mainCRTStartup` undefined. The fix is to start the build under
+`cmd /c "call vcvars64.bat && bun scripts/build.ts …"`.
+
+The x64 local WebKit build needs three vendor patches that i586 does not
+(documented in `scripts/build/deps/webkit.ts` under `patches`):
+
+- `pas-thread-suspender.patch` — bmalloc's `CMakeLists.txt` lists
+  `pas_thread_suspend_lock` but the i586 port also dropped
+  `pas_thread_suspender.{c,h}`. x64 builds use libpas (i586 uses mimalloc with
+  `BUSE_LIBPAS=0`), and `wtf/Threading.cpp` includes `<bmalloc/pas_thread_suspender.h>`.
+  Both files are `LIBPAS_ENABLED`-guarded, so restoring them is a no-op on x86.
+- `wasm-ops-guard.patch` — `WasmOps.h` is generated into both
+  `DerivedSources/` and `Headers/JavaScriptCore/`; a unified JSC TU can include
+  both paths, and `#pragma once` is path-based so both copies get fully
+  included → mass redefinition errors. The patch gives the generated header a
+  path-independent `#ifndef` guard (same pattern the i586 port used for
+  headers that conflict across copies).
+- `probe-trampoline-msvc.patch` — the i586 port gated the x86_64 probe
+  trampolines (`ctiMasmProbeTrampoline{,AVX}`) behind `!COMPILER(MSVC)`, but
+  clang-cl defines `COMPILER(MSVC)` and x64 JIT needs them at link time
+  (`undefined symbol: ctiMasmProbeTrampoline`). Restores the pre-i586 layout;
+  i586 never reaches the block (`#if CPU(X86_64)`).
+
+`src/jsc/bindings/wsapoll_stub.cpp` (WSAPoll → select() polyfill) is compiled
+on **all** Windows targets now, not just x86 — `bun_core::util::is_writable`
+calls `bun_wsapoll_stub` unconditionally. On x64 it's simply the
+implementation (WSAPoll is never imported); on x86 it doubles as the XP
+delay-load hook.
+
+## Native x64: the fetch() check
+
+The instrumented x64 debug build logs the pending-connect handoff that was
+hanging:
+
+```
+[uws] connect_group connecting ext write cs=0x… owner=0x… (kind=HttpClientTls)
+[httpclientlog] HTTPClient::on_open socket=0x… ext=Some(0x…) decoded_tag=1023
+[httpcontext] Handler::on_open ptr=0x… tag=1023 socket=0x…
+[fetch] Connected https://…
+```
+
+`owner` written by `connect_group` and `ext` read by `HTTPClient::on_open`
+must match (the ext slot is keyed by owner pointer, not socket pointer, and
+the tag must decode to `HttpClientTls`). With the local x64 build, `fetch()`
+completes in ~190 ms with `status: 200` — no hang.
+
 ### Missing v8 Shim Symbols
 
 The v8 C++ API shim in `src/jsc/bindings/v8/` compiles but uses x86 MSVC

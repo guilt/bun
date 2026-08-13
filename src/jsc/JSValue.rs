@@ -56,7 +56,6 @@ mod tags {
     pub const TRUE: u64 = 0x07;
     pub const FALSE: u64 = 0x06;
     pub const NUMBER_TAG: u64 = 0xfffe_0000_0000_0000;
-    pub const NOT_CELL_MASK: u64 = 0xfffe_0000_0000_0002;
     pub const DOUBLE_ENCODE_OFFSET: i64 = 1i64 << 49;
 }
 

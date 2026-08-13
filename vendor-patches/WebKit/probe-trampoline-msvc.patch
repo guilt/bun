@@ -1,0 +1,24 @@
+diff --git a/Source/JavaScriptCore/assembler/MacroAssemblerX86_64.cpp b/Source/JavaScriptCore/assembler/MacroAssemblerX86_64.cpp
+index 08ff85ee71..0f67dc9408 100644
+--- a/Source/JavaScriptCore/assembler/MacroAssemblerX86_64.cpp
++++ b/Source/JavaScriptCore/assembler/MacroAssemblerX86_64.cpp
+@@ -233,9 +233,9 @@ static_assert(sizeof(Probe::State) == PROBE_SIZE, "Probe::State::size's matches
+ #endif // !OS(DARWIN)
+ 
+ #if COMPILER(MSVC)
+-#else
+-#if !OS(DARWIN)
+ #define ASM_PREVIOUS_SECTION
++#else
++#define ASM_PREVIOUS_SECTION ".previous" "\n"
+ #endif
+ 
+ #define DEFINE_PROBE_TRAMPOLINE(trampolineName, xmmSave, xmmRestore, copyLoopLabel, stateIsSafeLabel, restoreRegsLabel) \
+@@ -418,7 +418,6 @@ DEFINE_PROBE_TRAMPOLINE(ctiMasmProbeTrampoline, PROBE_XMM_SAVE_MOVAPS, PROBE_XMM
+ DEFINE_PROBE_TRAMPOLINE(ctiMasmProbeTrampolineAVX, PROBE_XMM_SAVE_VMOVAPS, PROBE_XMM_RESTORE_VMOVAPS,
+     ctiMasmProbeTrampolineAVXCopyLoop, ctiMasmProbeTrampolineAVXProbeStateIsSafe, ctiMasmProbeTrampolineAVXRestoreRegisters)
+ #endif // OS(DARWIN) for DEFINE_PROBE_TRAMPOLINE
+-#endif // COMPILER(MSVC)
+ 
+ // What code is emitted for the probe?
+ // ==================================

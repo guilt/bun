@@ -2808,7 +2808,11 @@ JSC_DEFINE_JIT_OPERATION(jsBufferConstructorAllocWithoutTypeChecks, JSUint8Array
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     IGNORE_WARNINGS_END
     JSC::JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
+#if USE(JSVALUE64)
+    return { allocBuffer(lexicalGlobalObject, byteLength) };
+#else
     return static_cast<JSC::ExceptionOperationResultTag>(reinterpret_cast<uint64_t>(allocBuffer(lexicalGlobalObject, byteLength)));
+#endif
 }
 
 JSC_DEFINE_JIT_OPERATION(jsBufferConstructorAllocUnsafeWithoutTypeChecks, JSUint8Array*, (JSC::JSGlobalObject * lexicalGlobalObject, void* thisValue, int byteLength))
@@ -2818,7 +2822,11 @@ JSC_DEFINE_JIT_OPERATION(jsBufferConstructorAllocUnsafeWithoutTypeChecks, JSUint
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     IGNORE_WARNINGS_END
     JSC::JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
+#if USE(JSVALUE64)
+    return { allocBufferUnsafe(lexicalGlobalObject, byteLength) };
+#else
     return static_cast<JSC::ExceptionOperationResultTag>(reinterpret_cast<uint64_t>(allocBufferUnsafe(lexicalGlobalObject, byteLength)));
+#endif
 }
 
 JSC_DEFINE_JIT_OPERATION(jsBufferConstructorAllocUnsafeSlowWithoutTypeChecks, JSUint8Array*, (JSC::JSGlobalObject * lexicalGlobalObject, void* thisValue, int byteLength))
@@ -2828,7 +2836,11 @@ JSC_DEFINE_JIT_OPERATION(jsBufferConstructorAllocUnsafeSlowWithoutTypeChecks, JS
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     IGNORE_WARNINGS_END
     JSC::JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
+#if USE(JSVALUE64)
+    return { allocBufferUnsafe(lexicalGlobalObject, byteLength) };
+#else
     return static_cast<JSC::ExceptionOperationResultTag>(reinterpret_cast<uint64_t>(allocBufferUnsafe(lexicalGlobalObject, byteLength)));
+#endif
 }
 
 JSC_ANNOTATE_HOST_FUNCTION(JSBufferConstructorConstruct, JSBufferConstructor::construct);

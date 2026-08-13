@@ -1,0 +1,23 @@
+diff --git a/Source/JavaScriptCore/wasm/generateWasmOpsHeader.py b/Source/JavaScriptCore/wasm/generateWasmOpsHeader.py
+index 8850c64dc8..4eefe2e2cb 100755
+--- a/Source/JavaScriptCore/wasm/generateWasmOpsHeader.py
++++ b/Source/JavaScriptCore/wasm/generateWasmOpsHeader.py
+@@ -227,6 +227,9 @@ contents = wasm.header + """
+ 
+ #pragma once
+ 
++#ifndef WasmOps_h
++#define WasmOps_h
++
+ #include <wtf/Compiler.h>
+ 
+ WTF_ALLOW_UNSAFE_BUFFER_USAGE_BEGIN
+@@ -604,6 +607,8 @@ inline void printInternal(PrintStream& out, JSC::Wasm::ExtAtomicOpType op)
+ 
+ WTF_ALLOW_UNSAFE_BUFFER_USAGE_END
+ 
++#endif // WasmOps_h
++
+ """
+ 
+ wasmOpsHFile.write(contents)

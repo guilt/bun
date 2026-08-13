@@ -160,6 +160,25 @@ export const webkit: Dependency = {
     // headers/ABI the prebuilt ICU uses); build-icu.ps1 still pointed at the
     // stale 73.2 source URL.
     "vendor-patches/WebKit/build-icu-78.patch",
+    // bmalloc lists pas_thread_suspend_lock but not pas_thread_suspender;
+    // the i586 port dropped it (mimalloc, LIBPAS off) but x64 needs it.
+    // Files are LIBPAS_ENABLED-guarded so restoring is a no-op on x86.
+    ...(cfg.x86
+      ? []
+      : [
+          "vendor-patches/WebKit/pas-thread-suspender.patch",
+          // WasmOps.h is copied to both DerivedSources/ and Headers/, and a
+          // unified TU can include both paths (pragma once is path-based).
+          // Give the generated header a path-independent guard like the i586
+          // port did for headers that conflict across copies.
+          "vendor-patches/WebKit/wasm-ops-guard.patch",
+          // The i586 port gated the x86_64 probe trampolines behind
+          // !COMPILER(MSVC), but clang-cl defines COMPILER(MSVC) and x64
+          // needs ctiMasmProbeTrampoline{,AVX}. Restore the pre-i586 layout
+          // (empty ASM_PREVIOUS_SECTION on MSVC); i586 never reaches this
+          // block (#if CPU(X86_64)).
+          "vendor-patches/WebKit/probe-trampoline-msvc.patch",
+        ]),
     ...(cfg.x86
       ? [
           "vendor-patches/WebKit/DOMWrapperWorld.h.patch",
@@ -349,9 +368,13 @@ export const webkit: Dependency = {
         : "";
       // Set the target triple for clang and bypass the clang builtins check
       // (the Win9x LLVM distribution doesn't ship 32-bit clang_rt.builtins).
-      args.CMAKE_C_COMPILER_TARGET = "i586-pc-windows-msvc";
-      args.CMAKE_CXX_COMPILER_TARGET = "i586-pc-windows-msvc";
-      args.CLANG_BUILTINS_LIBRARY = "";
+      // i586-only — x64 local WebKit must keep the host triple or it builds
+      // 32-bit archives that fail to link against x64 bun.
+      if (cfg.x86) {
+        args.CMAKE_C_COMPILER_TARGET = "i586-pc-windows-msvc";
+        args.CMAKE_CXX_COMPILER_TARGET = "i586-pc-windows-msvc";
+        args.CLANG_BUILTINS_LIBRARY = "";
+      }
       args.CMAKE_C_FLAGS = `/DU_STATIC_IMPLEMENTATION ${staticFlags} ${mallocFlags} ${optFlagStr}`.trim();
       args.CMAKE_CXX_FLAGS = `/DU_STATIC_IMPLEMENTATION ${staticFlags} ${mallocFlags} /clang:-fno-c++-static-destructors ${optFlagStr}`.trim();
       // Static CRT to match bun + all other deps (we build everything
