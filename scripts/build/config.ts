@@ -940,7 +940,12 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
   // host-target objects at the same obj/ paths, and mixing COFF into an ELF
   // build dir (or vice versa) forces a full rebuild each time you switch.
   const crossWindowsSuffix = windows && host.os !== "windows" ? `-windows-${arch}` : "";
-  const defaultBuildDirName = computeBuildDirName({ debug, release, asan, assertions }) + crossWindowsSuffix;
+  // On a native Windows host, non-native archs (win9x/i586) build into a
+  // separate dir so the x64 debug/release builds aren't clobbered — both
+  // would otherwise resolve to build/debug + build/release and force a full
+  // rebuild every time you switch profiles.
+  const archSuffix = windows && host.os === "windows" && arch !== "x64" ? `-${arch}` : "";
+  const defaultBuildDirName = computeBuildDirName({ debug, release, asan, assertions }) + crossWindowsSuffix + archSuffix;
   const buildDir =
     partial.buildDir !== undefined
       ? isAbsolute(partial.buildDir)

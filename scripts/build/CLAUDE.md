@@ -94,6 +94,18 @@ ninja -C build/debug <target>               # build a specific target (e.g. tiny
 
 The generated `build.ninja` is the ground truth. If an edge isn't doing what you expect, read it there first.
 
+### Win9x (i586) builds on a Windows host
+
+- **Separate build dir.** On a native Windows host, a non-x64 target arch gets its
+  own build dir (`build/release-i586`, `build/debug-i586`; config.ts
+  `archSuffix`). Otherwise win9x and x64 profiles share `build/release` +
+  `build/debug` and force a full rebuild every profile switch.
+- **Perl.** `dep_configure`/`dep_build`/`codegen` rules prepend `findPerl()`'s
+  dir to `PATH` (cmd `set PATH=…;%PATH%&&` wrapper). WebKit's generated ninja
+  shells out to bare `perl` (inspector codegen via python), which resolves via
+  `PATH` at build time — the `-DPERL_EXECUTABLE` cmake var does NOT cover it.
+- Win9x-specific build/test docs live in `BUILD_WIN9X.md`.
+
 ## CLI arg parsing
 
 `bun scripts/build.ts [build-flags] [exec-args...]`. The cutoff: first arg that isn't a recognized build/ninja flag ends build-flag parsing — it and everything after go to the built binary.

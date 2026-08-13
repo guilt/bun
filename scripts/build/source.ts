@@ -30,6 +30,7 @@ import { writeIfChanged } from "./fs.ts";
 import type { Ninja } from "./ninja.ts";
 import { quote, quoteArgs, slash } from "./shell.ts";
 import { streamPath } from "./stream.ts";
+import { findPerl } from "./tools.ts";
 
 /**
  * If the source dir exists with a stale (or missing) identity stamp,
@@ -587,8 +588,14 @@ export function registerDepRules(n: Ninja, cfg: Config): void {
   // this one doesn't pass -DFOO at all, cmake keeps the cached ON. Since ninja
   // only reruns this rule when $args actually changed (tracked in .ninja_log),
   // we always want a clean slate when it does run.
+  //
+  // $env is stream.ts's --env=K=V list (see resolveCargo for the format).
+  // emitNestedCmake sets it to prepend findPerl()'s dir to PATH when needed:
+  // WebKit's generated ninja shells out to bare `perl` (inspector protocol
+  // codegen via python) which resolves via PATH at build time — not the
+  // PERL_EXECUTABLE cmake var. Empty for deps that don't need it.
   n.rule("dep_configure", {
-    command: `${stream} --cwd=$srcdir ${cmake} --fresh -B$builddir $args`,
+    command: `${stream} --cwd=$srcdir $env ${cmake} --fresh -B$builddir $args`,
     description: "cmake $name",
     restat: true,
     pool: "dep",
@@ -598,7 +605,7 @@ export function registerDepRules(n: Ninja, cfg: Config): void {
   // the dep, cmake --build is a no-op (inner ninja re-stats), and our restat
   // prunes everything downstream.
   n.rule("dep_build", {
-    command: `${stream} ${cmake} --build $builddir --config $buildtype $targets`,
+    command: `${stream} $env ${cmake} --build $builddir --config $buildtype $targets`,
     description: "build $name",
     restat: true,
     pool: "dep",
@@ -1211,6 +1218,24 @@ function emitNestedCmake(
   // but stays explicit for the pattern.
   const hostWin = cfg.host.os === "windows";
 
+  // stream.ts --env=K=V list. Prepend findPerl()'s dir to PATH on Windows:
+  // WebKit's generated ninja shells out to bare `perl` (inspector protocol
+  // codegen via python subprocess) which resolves via PATH at build time —
+  // not the PERL_EXECUTABLE cmake var passed at configure. Empty when perl is
+  // already on PATH or not needed.
+  let env = "";
+  if (hostWin) {
+    const perl = findPerl();
+    if (
+      perl &&
+      !(process.env.PATH ?? "")
+        .split(";")
+        .some(part => part.trim().length > 0 && resolve(part.trim()).toLowerCase() === resolve(dirname(perl)).toLowerCase())
+    ) {
+      env = `--env=PATH=${quote(dirname(perl) + ";" + (process.env.PATH ?? ""), true)}`;
+    }
+  }
+
   // cmake source dir (where CMakeLists.txt lives). Usually srcDir, but
   // some projects nest it (zstd: vendor/zstd/build/cmake/).
   const cmakeSrcDir = spec.sourceSubdir ? resolve(srcDir, spec.sourceSubdir) : srcDir;
@@ -1362,6 +1387,7 @@ function emitNestedCmake(
       srcdir: cmakeSrcDir,
       builddir: buildDir,
       args: quoteArgs(args, hostWin),
+      ...(env ? { env } : {}),
     },
   });
   n.phony(`configure-${name}`, [cacheFile]);
@@ -1403,6 +1429,7 @@ function emitNestedCmake(
       builddir: buildDir,
       buildtype: buildType,
       targets: targets.map(t => `--target ${t}`).join(" "),
+      ...(env ? { env } : {}),
     },
   });
 

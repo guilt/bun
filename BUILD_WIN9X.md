@@ -169,16 +169,21 @@ bun run build --profile=win9x-debug
 
 # Or step-by-step:
 bun run build --profile=win9x-debug --configure-only  # Generate build.ninja
-ninja -C build/debug                                    # Run the build
+ninja -C build/debug-i586                              # Run the build
 ```
 
-Release profile — same build, produces the stripped `build\release\bun.exe`
+Release profile — same build, produces the stripped `build\release-i586\bun.exe`
 (LTO is off, see the profile table above). Both profiles run strip (release)
 and the ASLR post-link step as ninja edges:
 
 ```powershell
 bun run build --profile=win9x-release
 ```
+
+On a native Windows host the win9x/i586 profiles build into arch-suffixed dirs
+(`build\debug-i586`, `build\release-i586`) so the x64 `build\debug` /
+`build\release` builds aren't clobbered — otherwise both resolve to the same
+dir and force a full rebuild every time you switch profiles.
 
 The configure step must run inside a Visual Studio developer shell (x64). The build script auto-re-execs if `VSINSTALLDIR` is missing.
 
@@ -191,7 +196,7 @@ manual invocation:
 
 - `scripts/build/shims.ts` `emitWin9xAslr()` emits a `win9x_aslr` edge that runs
   `misctools\pe_disable_aslr.py` on the deployed artifact: the stripped
-  `build\release\bun.exe` for `win9x-release`, the linked `build\debug\bun-debug.exe`
+  `build\release-i586\bun.exe` for `win9x-release`, the linked `build\debug-i586\bun-debug.exe`
   for `win9x-debug`.
 - The edge writes a `.aslr` stamp (pulled into the default targets), so ninja
   **re-patches after every relink** — no more silently-clobbered header.
@@ -203,7 +208,7 @@ manual invocation:
 Verify the header after a build:
 
 ```powershell
-python misctools\pe_disable_aslr.py build\debug\bun-debug.exe  # no-op: re-patch reports already-patched values
+python misctools\pe_disable_aslr.py build\debug-i586\bun-debug.exe  # no-op: re-patch reports already-patched values
 # or inspect with dumpbin /headers | findstr "DLL Characteristics"
 # Expect 0x8100 (ASLR flags cleared) and ImageBase 0x400000
 ```
@@ -214,11 +219,11 @@ python misctools\pe_disable_aslr.py build\debug\bun-debug.exe  # no-op: re-patch
 # Copy binary to target (ICU is statically linked — no ICU DLLs; the Win8+
 # API set stubs such as ProcessPrng/RtlWaitOnAddress are compiled directly
 # into the exe via win9x_apiset_stubs.cpp, so no companion DLL is needed)
-scp build/debug/bun-debug.exe user@xp-machine:C:/Bun/
+scp build/debug-i586/bun-debug.exe user@xp-machine:C:/Bun/
 
 # Release profile: use the stripped binary (identical to win9x-debug except
 # it has no PDB — same XP import table)
-scp build/release/bun.exe user@xp-machine:C:/Bun/
+scp build/release-i586/bun.exe user@xp-machine:C:/Bun/
 ```
 
 Both profiles produce an XP-ready binary automatically; the only per-binary
@@ -571,7 +576,7 @@ so **no companion stub DLL is required**. Deploy:
 | `BUN_ICU_PATH` | Path to an ICU 78.3 source root (default `vendor/icu/icu4c/source`); mirrors `BUN_WEBKIT_PATH`. |
 | `EXTDEV` | External-tools root (`D:\WS\EXTDEV`); rust9x toolchain junction target. |
 | `MAKEFLAGS` | **Removed** by `build-icu.ps1` at runtime — Git's env sets `j23`, which NMAKE rejects (`U1065`). |
-| `PATH` | Needs `py` on PATH (Python 3 for the ICU data build; the `py.cmd` shim in `%EXTDEV%\Bin` selects the interpreter by `-3`/`-3.x`/`-2`/`-2.x` selector or the AUTOEXEC `PYTHON*_HOME`/`PYTHON*_VERSION` variables). If clang/llvm tools fail to be found outside the VS dev shell, prepend `C:\Program Files\LLVM\bin`. **You no longer need to add Git's `usr\bin` to `PATH` for perl** — the build auto-detects it (see Reproducibility below). |
+| `PATH` | Needs `py` on PATH (Python 3 for the ICU data build; the `py.cmd` shim in `%EXTDEV%\Bin` selects the interpreter by `-3`/`-3.x`/`-2`/`-2.x` selector or the AUTOEXEC `PYTHON*_HOME`/`PYTHON*_VERSION` variables). If clang/llvm tools fail to be found outside the VS dev shell, prepend `C:\Program Files\LLVM\bin`. **You no longer need to add Git's `usr\bin` to `PATH` for perl** — the build auto-detects it and prepends it to `PATH` for the codegen, `dep_configure`, and `dep_build` rules (see Reproducibility below). |
 | `VSINSTALLDIR` | Set by running inside a VS developer shell (x64). `scripts/build.ts` auto-re-execs if unset. |
 
 ## Reproducibility
@@ -599,6 +604,14 @@ runs `find_package(Perl)`. Historically this required Git for Windows'
 - **WebKit cmake** (`scripts/build/deps/webkit.ts`): on Windows it passes
   `-DPERL_EXECUTABLE=<resolved perl>` to cmake, satisfying `find_package(Perl)`
   deterministically.
+- **Nested dep builds** (`scripts/build/source.ts` `registerDepRules`): the
+  `dep_configure` and `dep_build` rules prepend the resolved perl's bin dir to
+  `PATH` (same `cmd /c "set PATH=…;%PATH%&& …"` wrapper as the codegen rule).
+  WebKit's *generated* ninja (not cmake) shells out to bare `perl` — e.g. the
+  inspector protocol codegen runs `subprocess.check_call(["perl", …])` from a
+  python script — and that resolves via `PATH` at build time, not via the
+  `PERL_EXECUTABLE` cmake var. Without this, a local WebKit build fails at the
+  inspector codegen step on machines where Git's bundled perl isn't on `PATH`.
 
 ### `TARGET_ARCH` for 32-bit targets (`scripts/build/codegen.ts`)
 
