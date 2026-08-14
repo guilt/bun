@@ -2543,7 +2543,12 @@ impl JSValue {
         crate::top_scope!(scope, global);
         let v = JSC__JSValue__getOwn(self, global, property_name);
         scope.return_if_exception()?;
-        if v.is_empty() { Ok(None) } else { Ok(Some(v)) }
+        // C++ returns EncodedJSValue(0) (= all-bits-zero) when the property
+        // is not found. On JSVALUE64, is_empty() catches this (ValueEmpty=0).
+        // On JSVALUE32_64, is_empty() checks tag==EmptyValueTag (0xfffffff9),
+        // which does NOT match EncodedJSValue(0) (tag=0, payload=0). Check
+        // both sentinels.
+        if v.0 == 0 || v.is_empty() { Ok(None) } else { Ok(Some(v)) }
     }
     /// `JSValue.getOwnTruthy` — own-property lookup, filtered to non-undefined.
     pub fn get_own_truthy(

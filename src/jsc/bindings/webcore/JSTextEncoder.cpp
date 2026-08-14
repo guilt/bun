@@ -70,8 +70,8 @@ using namespace JSC::DOMJIT;
 
 extern "C" JSC::EncodedJSValue TextEncoder__encode8(JSC::JSGlobalObject* global, const Latin1Character* stringPtr, size_t stringLen);
 extern "C" JSC::EncodedJSValue TextEncoder__encode16(JSC::JSGlobalObject* global, const char16_t* stringPtr, size_t stringLen);
-extern "C" size_t TextEncoder__encodeInto8(const Latin1Character* stringPtr, size_t stringLen, void* ptr, size_t len);
-extern "C" size_t TextEncoder__encodeInto16(const char16_t* stringPtr, size_t stringLen, void* ptr, size_t len);
+extern "C" uint64_t TextEncoder__encodeInto8(const Latin1Character* stringPtr, size_t stringLen, void* ptr, size_t len);
+extern "C" uint64_t TextEncoder__encodeInto16(const char16_t* stringPtr, size_t stringLen, void* ptr, size_t len);
 extern "C" JSC::EncodedJSValue TextEncoder__encodeRopeString(JSC::JSGlobalObject* lexicalGlobalObject, JSC::JSString* str);
 
 // extern "C" {
@@ -439,7 +439,7 @@ static inline JSC::EncodedJSValue jsTextEncoderPrototypeFunction_encodeIntoBody(
         return {};
     }
 
-    size_t res = 0;
+    uint64_t res = 0;
     if (!source->is8Bit()) {
         const auto span = source->span16();
         res = TextEncoder__encodeInto16(span.data(), span.size(), destination->vector(), destination->byteLength());
