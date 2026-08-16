@@ -185,6 +185,7 @@ pub(crate) struct SectionHeader {
 
 const PE_SIGNATURE: u32 = 0x0000_4550; // "PE\0\0"
 const DOS_SIGNATURE: u16 = 0x5A4D; // "MZ"
+const OPTIONAL_HEADER_MAGIC_32: u16 = 0x010B;
 const OPTIONAL_HEADER_MAGIC_64: u16 = 0x020B;
 
 // Section characteristics
@@ -267,6 +268,55 @@ impl PEFile {
         view_at_const::<OptionalHeader64>(&self.data, self.optional_header_offset)
     }
 
+    /// Byte offset of the DataDirectory array within the optional header.
+    /// PE32 (32-bit) and PE32+ (64-bit) differ here: the stack/heap commit
+    /// fields are u32 in PE32 (data_directories at 96) but u64 in PE32+
+    /// (data_directories at 112). The fields we actually touch (magic,
+    /// file_alignment, section_alignment, size_of_headers, size_of_image) sit
+    /// at identical offsets in both, so only the DataDirectory array index
+    /// needs format-aware addressing.
+    fn data_directories_offset(&self) -> Result<usize, Error> {
+        let magic = self.optional_header_magic()?;
+        Ok(match magic {
+            OPTIONAL_HEADER_MAGIC_64 => 112,
+            OPTIONAL_HEADER_MAGIC_32 => 96,
+            _ => return Err(Error::UnsupportedPEFormat),
+        })
+    }
+
+    fn optional_header_magic(&self) -> Result<u16, Error> {
+        if self.data.len() < self.optional_header_offset + size_of::<u16>() {
+            return Err(Error::OutOfBounds);
+        }
+        // SAFETY: bounds-checked above; u16 at optional_header_offset.
+        Ok(unsafe { ptr::read_unaligned(self.data.as_ptr().add(self.optional_header_offset).cast::<u16>()) })
+    }
+
+    /// Read the security directory (index 4) at the format-correct offset.
+    fn security_directory(&self) -> Result<DataDirectory, Error> {
+        let off = self.data_directories_offset()? + IMAGE_DIRECTORY_ENTRY_SECURITY * size_of::<DataDirectory>();
+        if self.data.len() < self.optional_header_offset + off + size_of::<DataDirectory>() {
+            return Err(Error::OutOfBounds);
+        }
+        // SAFETY: bounds-checked above.
+        Ok(unsafe { ptr::read_unaligned(self.data.as_ptr().add(self.optional_header_offset + off).cast::<DataDirectory>()) })
+    }
+
+    /// Zero the security directory (signature invalidated by the .bun change).
+    fn clear_security_directory(&mut self) -> Result<(), Error> {
+        let off = self.data_directories_offset()? + IMAGE_DIRECTORY_ENTRY_SECURITY * size_of::<DataDirectory>();
+        if self.data.len() < self.optional_header_offset + off + size_of::<DataDirectory>() {
+            return Err(Error::OutOfBounds);
+        }
+        // SAFETY: bounds-checked above.
+        let dd = unsafe { ptr::addr_of_mut!(*self.data.as_mut_ptr().add(self.optional_header_offset + off).cast::<DataDirectory>()) };
+        unsafe {
+            (*dd).virtual_address = 0;
+            (*dd).size = 0;
+        }
+        Ok(())
+    }
+
     fn get_optional_header_mut(&mut self) -> Result<*mut OptionalHeader64, Error> {
         view_at_mut::<OptionalHeader64>(&mut self.data, self.optional_header_offset)
     }
@@ -324,7 +374,21 @@ impl PEFile {
         if data.len() < optional_header_offset + pe_header.size_of_optional_header as usize {
             return Err(Error::InvalidPEFile);
         }
-        if (pe_header.size_of_optional_header as usize) < size_of::<OptionalHeader64>() {
+        // Read the optional-header magic to size the minimum-required header
+        // against the correct format. PE32 (0x10B) optional headers are 224
+        // bytes; PE32+ (0x20B) are 240 bytes.
+        if data.len() < optional_header_offset + size_of::<u16>() {
+            return Err(Error::InvalidPEFile);
+        }
+        let opt_magic = unsafe {
+            ptr::read_unaligned(data.as_ptr().add(optional_header_offset).cast::<u16>())
+        };
+        let min_opt_header_size = match opt_magic {
+            OPTIONAL_HEADER_MAGIC_64 => size_of::<OptionalHeader64>(),
+            OPTIONAL_HEADER_MAGIC_32 => 224,
+            _ => return Err(Error::UnsupportedPEFormat),
+        };
+        if (pe_header.size_of_optional_header as usize) < min_opt_header_size {
             return Err(Error::InvalidPEFile);
         }
 
@@ -334,7 +398,9 @@ impl PEFile {
         let optional_header = view_at_mut::<OptionalHeader64>(&mut data, optional_header_offset)?;
         // SAFETY: validated bounds above
         let optional_header = unsafe { &mut *optional_header };
-        if optional_header.magic != OPTIONAL_HEADER_MAGIC_64 {
+        if optional_header.magic != OPTIONAL_HEADER_MAGIC_64
+            && optional_header.magic != OPTIONAL_HEADER_MAGIC_32
+        {
             return Err(Error::UnsupportedPEFormat);
         }
 
@@ -412,16 +478,10 @@ impl PEFile {
 
     /// Strip Authenticode signatures from the PE file
     pub fn strip_authenticode(&mut self, opts: StripOpts) -> Result<(), Error> {
-        let opt = view_at_mut::<OptionalHeader64>(&mut self.data, self.optional_header_offset)?;
-
-        // Read Security directory (index 4)
-        // SAFETY: opt points into self.data at validated offset
-        let dd_ptr: *mut DataDirectory =
-            unsafe { ptr::addr_of_mut!((*opt).data_directories[IMAGE_DIRECTORY_ENTRY_SECURITY]) };
-        // SAFETY: dd_ptr is within the OptionalHeader64 struct
-        let sec_off_u32 = unsafe { (*dd_ptr).virtual_address }; // file offset (not RVA)
-        // SAFETY: dd_ptr is within the OptionalHeader64 struct (bounds-checked via view_at_mut)
-        let sec_size_u32 = unsafe { (*dd_ptr).size };
+        // Read Security directory (index 4) at the format-correct offset.
+        let dd = self.security_directory()?;
+        let sec_off_u32 = dd.virtual_address; // file offset (not RVA)
+        let sec_size_u32 = dd.size;
 
         if sec_off_u32 == 0 || sec_size_u32 == 0 {
             return Ok(()); // nothing to strip
@@ -545,10 +605,8 @@ impl PEFile {
                 recompute_checksum: true,
             })?;
         } else if strip == StripMode::StripIfSigned {
-            // Read Security directory to check if signed
-            let opt = self.get_optional_header()?;
-            // SAFETY: opt points into self.data at validated offset
-            let dd = unsafe { (*opt).data_directories[IMAGE_DIRECTORY_ENTRY_SECURITY] };
+            // Read Security directory to check if signed (format-aware offset)
+            let dd = self.security_directory()?;
             if dd.virtual_address != 0 || dd.size != 0 {
                 self.strip_authenticode(StripOpts {
                     require_overlay: true,
@@ -689,12 +747,10 @@ impl PEFile {
                 align_up_u32(section_va_end, (*opt_after).section_alignment)?;
 
             // Security directory must be zero (signature invalidated by change)
-            let dd_ptr: *mut DataDirectory =
-                ptr::addr_of_mut!((*opt_after).data_directories[IMAGE_DIRECTORY_ENTRY_SECURITY]);
-            if (*dd_ptr).virtual_address != 0 || (*dd_ptr).size != 0 {
-                (*dd_ptr).virtual_address = 0;
-                (*dd_ptr).size = 0;
-            }
+        }
+        // SAFETY: opt_after borrow ended; clear at the format-correct offset.
+        if self.security_directory()?.virtual_address != 0 || self.security_directory()?.size != 0 {
+            self.clear_security_directory()?;
         }
 
         // Do not touch size_of_initialized_data (leave as is)
@@ -792,11 +848,13 @@ impl PEFile {
             return Err(Error::InvalidPESignature);
         }
 
-        // Check optional header magic is 0x20B (64-bit)
+        // Check optional header magic is 0x20B (64-bit) or 0x10B (32-bit)
         let optional_header = self.get_optional_header()?;
         // SAFETY: optional_header points into self.data at validated offset
         let optional_header = unsafe { &*optional_header };
-        if optional_header.magic != OPTIONAL_HEADER_MAGIC_64 {
+        if optional_header.magic != OPTIONAL_HEADER_MAGIC_64
+            && optional_header.magic != OPTIONAL_HEADER_MAGIC_32
+        {
             return Err(Error::UnsupportedPEFormat);
         }
 

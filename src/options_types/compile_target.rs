@@ -227,7 +227,9 @@ impl CompileTarget {
     pub fn is_supported(&self) -> bool {
         match self.os {
             OperatingSystem::Windows => {
-                self.arch == Architecture::X64 || self.arch == Architecture::Arm64
+                self.arch == Architecture::X64
+                    || self.arch == Architecture::Arm64
+                    || self.arch == Architecture::X86
             }
 
             OperatingSystem::Mac => true,
@@ -449,7 +451,17 @@ impl CompileTarget {
                     OperatingSystem::Wasm => table!(b"\"wasm\"", b"\"arm64\""),
                 },
             },
-            _ => panic!("TODO"),
+            Architecture::X86 => match self.libc {
+                Libc::Android => table!(b"\"android\"", b"\"x86\""),
+                _ => match self.os {
+                    OperatingSystem::Linux => table!(b"\"linux\"", b"\"x86\""),
+                    OperatingSystem::Windows => table!(b"\"win32\"", b"\"x86\""),
+                    OperatingSystem::Freebsd => table!(b"\"freebsd\"", b"\"x86\""),
+                    OperatingSystem::Mac => table!(b"\"darwin\"", b"\"x86\""),
+                    OperatingSystem::Wasm => table!(b"\"wasm\"", b"\"x86\""),
+                },
+            },
+            Architecture::Wasm => panic!("TODO"),
         }
     }
 }
