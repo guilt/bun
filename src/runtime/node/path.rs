@@ -593,13 +593,13 @@ pub fn basename(
         return Ok(path_ptr);
     }
 
-    let path_zslice = path_zstr.to_slice();
+    let path_zslice = path_zstr.to_slice_clone();
 
     let mut suffix_zslice: Option<bun_core::ZigStringSlice> = None;
     if let Some(_suffix_ptr) = suffix_ptr {
         let suffix_zstr = _suffix_ptr.get_zig_string(global_object)?;
         if suffix_zstr.len > 0 && suffix_zstr.len <= path_zstr.len {
-            suffix_zslice = Some(suffix_zstr.to_slice());
+            suffix_zslice = Some(suffix_zstr.to_slice_clone());
         }
     }
     basename_js_t::<u8>(
@@ -808,7 +808,7 @@ pub(crate) fn dirname(
         return BunString::create_utf8_for_js(global_object, CHAR_STR_DOT);
     }
 
-    let path_zslice = path_zstr.to_slice();
+    let path_zslice = path_zstr.to_slice_clone();
     dirname_js_t::<u8>(global_object, is_windows, path_zslice.slice())
 }
 
@@ -1051,7 +1051,7 @@ pub(crate) fn extname(
         return Ok(path_ptr);
     }
 
-    let path_zslice = path_zstr.to_slice();
+    let path_zslice = path_zstr.to_slice_clone();
     extname_js_t::<u8>(global_object, is_windows, path_zslice.slice())
 }
 
@@ -1583,7 +1583,12 @@ pub fn join(
         if path_zstr.len == 0 {
             continue;
         }
-        owned.push(path_zstr.to_slice());
+        // Clone (never borrow) each segment. to_slice() returns a Static
+        // borrow of the JSC StringImpl backing; for a rope/substring the
+        // materialized impl is not rooted, so a GC run during this loop's
+        // allocations (to_utf8_from_latin1) frees it → use-after-free
+        // (observed as heap corruption in path.join during large bundles).
+        owned.push(path_zstr.to_slice_clone());
     }
     // Derive the `&[u8]` views in a second pass once `owned` is fully built —
     // borrowck then sees `paths` as a plain reborrow of `owned` with no
@@ -2018,7 +2023,7 @@ pub(crate) fn normalize(
         return BunString::create_utf8_for_js(global_object, CHAR_STR_DOT);
     }
 
-    let path_zslice = path_zstr.to_slice();
+    let path_zslice = path_zstr.to_slice_clone();
     let pool = &mut global_object.bun_vm().as_mut().rare_data().path_buf;
     normalize_js_t::<u8>(global_object, pool, is_windows, path_zslice.slice())
 }
@@ -2387,7 +2392,7 @@ pub fn parse(
         return PathParsed::<u8>::default().to_js_object(global_object);
     }
 
-    let path_zslice = path_zstr.to_slice();
+    let path_zslice = path_zstr.to_slice_clone();
     parse_js_t::<u8>(global_object, is_windows, path_zslice.slice())
 }
 
@@ -2805,8 +2810,8 @@ pub(crate) fn relative(
         return Ok(from_ptr);
     }
 
-    let from_zig_slice = from_zig_str.to_slice();
-    let to_zig_slice = to_zig_str.to_slice();
+    let from_zig_slice = from_zig_str.to_slice_clone();
+    let to_zig_slice = to_zig_str.to_slice_clone();
     let pool = &mut global_object.bun_vm().as_mut().rare_data().path_buf;
     relative_js_t::<u8>(
         global_object,
@@ -3436,7 +3441,7 @@ pub(crate) fn resolve(
             continue;
         }
 
-        owned.push(path_zstr.to_slice());
+        owned.push(path_zstr.to_slice_clone());
 
         if !is_windows {
             // `'/'` is ASCII, so byte-level check on the UTF-8 view matches `charAt(0)`.
@@ -3593,7 +3598,7 @@ pub(crate) fn to_namespaced_path(
         return Ok(path_ptr);
     }
 
-    let path_zslice = path_zstr.to_slice();
+    let path_zslice = path_zstr.to_slice_clone();
     let pool = &mut global_object.bun_vm().as_mut().rare_data().path_buf;
     to_namespaced_path_js_t::<u8>(global_object, pool, is_windows, path_zslice.slice())
 }
