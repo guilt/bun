@@ -952,6 +952,10 @@ export const linkerFlags: Flag[] = [
       ...c.windowsX86LibDirs.map(d => `/libpath:"${d}"`),
       // XP/Win9x subsystem version (5.01 = Windows XP).
       "/subsystem:console,5.01",
+      // Allow the 32-bit process to use a >2GB address space on 64-bit
+      // Windows (and 3GB on XP with the /3GB boot flag). Needed to bundle
+      // large graphs (opencode) in the 32-bit address space.
+      "/LARGEADDRESSAWARE",
       // Exclude API set import lib (synchronization.lib) so
       // WaitOnAddress/WakeByAddress* resolve to our stubs in
       // win9x_apiset_stubs.cpp instead of generating imports from
