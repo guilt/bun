@@ -473,10 +473,23 @@ HANDLE __stdcall ReOpenFile(HANDLE, DWORD, DWORD, DWORD) {
 // -- Thread / Stack APIs (Vista+) --
 
 VOID __stdcall GetCurrentThreadStackLimits(ULONG_PTR* LowLimit, ULONG_PTR* HighLimit) {
+    // The real Vista+ API returns the thread's *reserved* stack bounds. On
+    // XP/9x we emulate it. The TEB StackBase (FS:[0x04]) is the top of the
+    // committed region; reading TEB StackLimit (FS:[0x08]) only gives the
+    // *committed* bottom, which is too small and moves as the stack grows.
+    // Bun caches the limits once at init, so a committed-only value makes the
+    // stack check fire prematurely on deep CJS require nesting (~8 levels).
+    // Use VirtualQuery on the stack top to find the AllocationBase — the
+    // bottom of the whole reserved region — matching the real API.
+    ULONG_PTR high = __readfsdword(0x04); // TEB.StackBase
+    ULONG_PTR low = high;
+    MEMORY_BASIC_INFORMATION mbi;
+    if (VirtualQuery(reinterpret_cast<LPCVOID>(high - 0x1000), &mbi, sizeof(mbi)) && mbi.AllocationBase)
+        low = reinterpret_cast<ULONG_PTR>(mbi.AllocationBase);
     if (LowLimit)
-        *LowLimit = __readfsdword(0x08);
+        *LowLimit = low;
     if (HighLimit)
-        *HighLimit = __readfsdword(0x04);
+        *HighLimit = high;
 }
 
 HRESULT __stdcall SetThreadDescription(HANDLE, PCWSTR) {
