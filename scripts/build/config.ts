@@ -141,6 +141,14 @@ export interface Config {
   /** IR PGO: .profdata file path (optimized build). Mutually exclusive with pgoGenerate. */
   pgoUse: string | undefined;
   asan: boolean;
+  /**
+   * Windows ASAN: use MSVC's link.exe for the final link instead of lld-link.
+   * clang-cl's ASAN instruments the MSVC STL (annotate_string=1, stl_asan.lib);
+   * lld-link hard-errors on the resulting `std::ios_base::flags was replaced`
+   * ABI conflict, whereas MSVC's linker treats it as a non-fatal LNK4006 and
+   * links the (supported) MSVC-ASAN-STL + MSVC-linker combination cleanly.
+   */
+  useMsvcLink: boolean;
   assertions: boolean;
   logs: boolean;
   /** x64-only: target nehalem (no AVX). Default true on x64 — the only x64 build we ship. */
@@ -812,6 +820,13 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
       ? false
       : (partial.asan ?? asanDefault);
 
+  // Windows ASAN (native, i586 win9x): clang-cl's ASAN instruments the MSVC
+  // STL, and lld-link hard-errors on the resulting `std::ios_base::flags was
+  // replaced` ABI conflict. MSVC's link.exe handles it as a non-fatal LNK4006
+  // (the supported MSVC-ASAN-STL + MSVC-linker combo). Fall back to lld-link
+  // if no MSVC link.exe is available (e.g. xwin cross-compile).
+  const useMsvcLink = windows && asan && host.os === "windows" && !darwinCross;
+
   // Assertions: default on in debug OR asan. ASAN coupling is ABI-critical:
   // the -asan WebKit prebuilt is built with ASSERT_ENABLED=1, which gates
   // struct fields (RefCountDebugger etc). If bun's C++ isn't also compiled
@@ -1237,6 +1252,7 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
     pgoGenerate,
     pgoUse,
     asan,
+    useMsvcLink,
     assertions,
     logs,
     baseline,

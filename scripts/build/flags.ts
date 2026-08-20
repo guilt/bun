@@ -1026,9 +1026,16 @@ export const linkerFlags: Flag[] = [
     desc: "Windows cross-compile: MSVC CRT + Windows SDK library search root (xwin splat)",
   },
   {
-    flag: ["/STACK:0x1200000,0x200000", "/errorlimit:0"],
+    flag: "/STACK:0x1200000,0x200000",
     when: c => c.windows,
-    desc: "18MB stack reserve (JSC uses deep recursion), no error limit",
+    desc: "18MB stack reserve (JSC uses deep recursion)",
+  },
+  {
+    // /errorlimit is lld-link-only; MSVC's link.exe doesn't recognize it
+    // (LNK4044) — and the asan win9x build links via link.exe (useMsvcLink).
+    flag: "/errorlimit:0",
+    when: c => c.windows && !c.useMsvcLink,
+    desc: "No error limit (lld-link)",
   },
   {
     flag: "/DEBUG:FULL",

@@ -169,7 +169,12 @@ export function registerCompileRules(n: Ninja, cfg: Config): void {
   const wrap = `${cfg.jsRuntime} ${q(streamPath)} link --console`;
   n.rule("link", {
     command: cfg.windows
-      ? `${wrap} ${cxx} /nologo -fuse-ld=lld ${q(`/clang:-B${dirname(cfg.ld)}`)} @$out.rsp /Fe$out /link $ldflags`
+      ? cfg.useMsvcLink
+        ? // Windows ASAN: clang-cl's ASAN STL (annotate_string=1, stl_asan.lib)
+          // hard-errors in lld-link ("std::ios_base::flags was replaced"). MSVC's
+          // link.exe treats it as a non-fatal LNK4006 — the supported combo.
+          `${wrap} ${q(cfg.msvcLinker!)} /NOLOGO @$out.rsp /OUT:$out $ldflags`
+        : `${wrap} ${cxx} /nologo -fuse-ld=lld ${q(`/clang:-B${dirname(cfg.ld)}`)} @$out.rsp /Fe$out /link $ldflags`
       : `${wrap} ${cxx} @$out.rsp $ldflags -o $out${elfDebugCompressPostlinkCommand(cfg)}${machoPostlinkCommand(cfg)}`,
     description: "link $out",
     rspfile: "$out.rsp",
