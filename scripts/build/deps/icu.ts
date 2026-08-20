@@ -21,6 +21,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Config } from "../config.ts";
 import { type Dependency, depBuildDir } from "../source.ts";
+import { computeCpuTargetFlags, computeDepFlags } from "../flags.ts";
 
 const ICU_VERSION = "78.3";
 
@@ -112,6 +113,17 @@ export const icu: Dependency = {
     // Debug ICU would produce /MDd (level 2) and fail the link.
     const icuBuildType = cfg.asan ? "Release" : cfg.debug ? "Debug" : "Release";
     const dynCrt = cfg.asan ? "-UseDynamicCRT" : "";
+    // ASAN: build ICU's common/i18n static libs with clang-cl + the SAME dep
+    // flags as WebKit/boringssl/etc. (via computeDepFlags). clang-cl's ASAN
+    // instruments the MSVC STL (annotate_string=1, stl_asan.lib); ICU's msbuild
+    // cl.exe objects would emit annotate_string=0 and fail the final link.
+    // The data (sicudt.lib) stays msbuild — it's pure data, no STL annotation.
+    const clangCl = cfg.asan
+      ? [
+          "-Compiler", cfg.cxx,
+          "-CxxFlags", [...computeDepFlags(cfg).cxxflags, ...computeCpuTargetFlags(cfg)].join(" "),
+        ]
+      : [];
     return {
       kind: "script",
       command: [
@@ -121,6 +133,7 @@ export const icu: Dependency = {
         "-BuildType", icuBuildType,
         "-OutputDir", out,
         ...(dynCrt ? [dynCrt] : []),
+        ...clangCl,
       ],
       cwd: srcDir,
       outputs: localIcuLibs(cfg),

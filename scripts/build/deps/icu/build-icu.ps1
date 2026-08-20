@@ -26,7 +26,19 @@ param(
     # ASAN: use the dynamic MSVC runtime (/MD) instead of the static /MT that
     # the win9x XP-compat build normally needs. clang-cl's AddressSanitizer
     # requires the dynamic CRT; keeping ICU static-CRT would mismatch at link.
-    [switch]$UseDynamicCRT = $false
+    [switch]$UseDynamicCRT = $false,
+
+    # ASAN: path to clang-cl.exe. When set, ICU's common/i18n STATIC libs (the
+    # ones linked into bun) are compiled with clang-cl + $CxxFlags instead of
+    # msbuild/cl.exe. Required so ICU's MSVC-STL objects carry the same
+    # annotate_string=1 / stl_asan.lib directives as WebKit/boringssl/etc. and
+    # the final link doesn't fail on a /failifmismatch. The makedata STAGE 1
+    # (data tools) stays msbuild — those DLLs never link into bun.
+    [string]$Compiler = "",
+
+    # ASAN: the clang-cl flag string (already includes /MD, -fsanitize=address,
+    # -resource-dir, -march, /GR-, /EHs-c-, ...). Passed straight through.
+    [string]$CxxFlags = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -430,8 +442,99 @@ if ((Test-Path $icupkg) -and $datFile) {
 }
 
 # ========================================================================
-# STAGE 2: Rebuild common and i18n as static libraries with /MT
+# STAGE 2: Rebuild common and i18n as static libraries
 # ========================================================================
+# ASAN path: compile ICU's common/i18n .cpp with clang-cl so the MSVC-STL
+# objects carry the same ASAN STL directives (annotate_string=1, stl_asan.lib)
+# as every other clang-cl dep. Non-ASAN keeps the msbuild /MT path below.
+if ($Compiler) {
+    # clang-cl writes warnings to stderr; with $ErrorActionPreference=Stop (set
+    # at the top of the script) a plain warning becomes a terminating
+    # NativeCommandError. Drop to Continue here so warnings don't kill the build;
+    # real failures are still caught by the explicit exit-code check + throw.
+    $ErrorActionPreference = "Continue"
+    Write-Host ""
+    Write-Host ":: STAGE 2: Building ICU common/i18n as static libs with clang-cl (ASAN)..."
+    Write-Host ":: Compiler: $Compiler"
+    Write-Host ":: CxxFlags: $CxxFlags"
+
+    $llvmLib = Join-Path (Split-Path -Parent $Compiler) "llvm-lib.exe"
+    if (-not (Test-Path $llvmLib)) { throw "llvm-lib.exe not found next to clang-cl at: $llvmLib" }
+
+    # Split the space-joined flag string into separate args (our flags have no
+    # embedded spaces).
+    $flagArray = @($CxxFlags.Split(" ") | Where-Object { $_ -ne "" })
+
+    $null = mkdir -Force "$ICU_LIB_DIR"
+
+    function Invoke-IcuLibClangCl {
+        param(
+            [string]$LibFile,
+            [string]$SourceDir,
+            [string[]]$Defines,
+            [string[]]$Includes,
+            [string]$ObjRoot
+        )
+        $sources = Get-ChildItem -Path $SourceDir -Filter "*.cpp" | Sort-Object Name
+        New-Item -ItemType Directory -Path $ObjRoot -Force | Out-Null
+        $objs = @()
+        foreach ($src in $sources) {
+            $obj = Join-Path $ObjRoot "$([IO.Path]::GetFileNameWithoutExtension($src.Name)).obj"
+            $ccArgs = @(
+                "/nologo",
+                $flagArray,
+                "/std:c++17",
+                $Defines,
+                $Includes,
+                "/c", $src.FullName, "/Fo:$obj"
+            )
+            $ccOut = & $Compiler @ccArgs 2>&1
+            $ccExit = $LASTEXITCODE
+            if ($ccExit -ne 0) {
+                Write-Host "clang-cl failed for $($src.FullName) (exit $ccExit):"
+                $ccOut | ForEach-Object { Write-Host "  $_" }
+                throw "clang-cl failed for $($src.FullName) (exit $ccExit)"
+            }
+            $objs += $obj
+        }
+        Write-Host "  Archiving $($objs.Count) objects -> $LibFile"
+        & $llvmLib "/out:$LibFile" $objs
+        if ($LASTEXITCODE -ne 0) { throw "llvm-lib failed for $LibFile (exit $LASTEXITCODE)" }
+    }
+
+    $definesCommon = @(
+        "-DU_STATIC_IMPLEMENTATION", "-DU_ATTRIBUTE_DEPRECATED=",
+        "-DU_COMMON_IMPLEMENTATION", "-DU_PLATFORM_USES_ONLY_WIN32_API=1",
+        "-DNDEBUG", "-DWIN32"
+    )
+    $definesI18n = @(
+        "-DU_STATIC_IMPLEMENTATION", "-DU_ATTRIBUTE_DEPRECATED=",
+        "-DU_I18N_IMPLEMENTATION", "-DU_PLATFORM_USES_ONLY_WIN32_API=1",
+        "-DNDEBUG", "-DWIN32"
+    )
+
+    $commonSrc = Join-Path $ICU_SOURCE_DIR "common"
+    $i18nSrc = Join-Path $ICU_SOURCE_DIR "i18n"
+
+    $null = mkdir -Force "$OutputDir\clang-obj"
+    Invoke-IcuLibClangCl `
+        -LibFile (Join-Path $ICU_LIB_DIR "icuuc.lib") `
+        -SourceDir $commonSrc `
+        -Defines $definesCommon `
+        -Includes @("-I$commonSrc") `
+        -ObjRoot "$OutputDir\clang-obj\common"
+
+    Invoke-IcuLibClangCl `
+        -LibFile (Join-Path $ICU_LIB_DIR "icuin.lib") `
+        -SourceDir $i18nSrc `
+        -Defines $definesI18n `
+        -Includes @("-I$i18nSrc", "-I$commonSrc") `
+        -ObjRoot "$OutputDir\clang-obj\i18n"
+
+    Write-Host ":: Built ICU common/i18n static libs (clang-cl, ASAN)"
+    $ErrorActionPreference = "Stop"
+    # Data lib (sicudt.lib) copy + debug-named lib copies handled below.
+} else {
 Write-Host ""
 Write-Host ":: STAGE 2: Rebuilding ICU common and i18n as static libraries with /MT..."
 
@@ -476,6 +579,7 @@ foreach ($target in @("common", "i18n")) {
 
     Write-Host ":: Built $target successfully"
 }
+}  # end ASAN-else: non-clang-cl (msbuild) STAGE 2 for common/i18n
 
 # --- Copy output files to expected locations ---
 Write-Host ""
@@ -519,23 +623,27 @@ $null = mkdir -Force $ICU_LIB_DIR
 Copy-IcuFile -Source "$ICU_SOURCE_DIR/common/unicode/*" -Destination "$ICU_INCLUDE_DIR/unicode" -Recursive
 Copy-IcuFile -Source "$ICU_SOURCE_DIR/i18n/unicode/*" -Destination "$ICU_INCLUDE_DIR/unicode" -Recursive
 
-# Copy libraries
-# MSBuild outputs to: <project>/<Platform>/<Configuration>/<project>.lib
-$commonLibSrc = Join-Path $ICU_SOURCE_DIR "common\$Platform\$BuildType\common.lib"
-$i18nLibSrc = Join-Path $ICU_SOURCE_DIR "i18n\$Platform\$BuildType\i18n.lib"
+# common/i18n static libs. clang-cl (ASAN) already wrote icuuc.lib/icuin.lib
+# directly in STAGE 2; the msbuild path outputs common.lib/i18n.lib which we
+# copy here.
+if (-not $Compiler) {
+    # MSBuild outputs to: <project>/<Platform>/<Configuration>/<project>.lib
+    $commonLibSrc = Join-Path $ICU_SOURCE_DIR "common\$Platform\$BuildType\common.lib"
+    $i18nLibSrc = Join-Path $ICU_SOURCE_DIR "i18n\$Platform\$BuildType\i18n.lib"
 
-if (Test-Path $commonLibSrc) {
-    Copy-IcuFile -Source $commonLibSrc -Destination "$ICU_LIB_DIR/icuuc.lib"
-    Write-Host "  Copied: common.lib -> icuuc.lib"
-} else {
-    throw "ICU common library not found at: $commonLibSrc"
-}
+    if (Test-Path $commonLibSrc) {
+        Copy-IcuFile -Source $commonLibSrc -Destination "$ICU_LIB_DIR/icuuc.lib"
+        Write-Host "  Copied: common.lib -> icuuc.lib"
+    } else {
+        throw "ICU common library not found at: $commonLibSrc"
+    }
 
-if (Test-Path $i18nLibSrc) {
-    Copy-IcuFile -Source $i18nLibSrc -Destination "$ICU_LIB_DIR/icuin.lib"
-    Write-Host "  Copied: i18n.lib -> icuin.lib"
-} else {
-    throw "ICU i18n library not found at: $i18nLibSrc"
+    if (Test-Path $i18nLibSrc) {
+        Copy-IcuFile -Source $i18nLibSrc -Destination "$ICU_LIB_DIR/icuin.lib"
+        Write-Host "  Copied: i18n.lib -> icuin.lib"
+    } else {
+        throw "ICU i18n library not found at: $i18nLibSrc"
+    }
 }
 
 # ICU data library - output location depends on platform
@@ -575,6 +683,19 @@ if (Test-Path $icuDataLibSrc) {
         Write-Host "    Found: $($_.FullName)"
     }
     throw "ICU data library not found. Expected at: $icuDataLibSrc"
+}
+
+if ($UseDynamicCRT) {
+    # ASAN (/MD, Release config): cmake's FindICU searches for the debug-named
+    # import libs (icudtd/icuind/icuucd) to populate the Debug config of the
+    # ICU::* imported targets. They are the same /MD libs — provide the names.
+    foreach ($pair in @(@("icudt.lib", "icudtd.lib"), @("icuin.lib", "icuind.lib"), @("icuuc.lib", "icuucd.lib"))) {
+        $src = Join-Path $ICU_LIB_DIR $pair[0]
+        if (Test-Path $src) {
+            Copy-IcuFile -Source $src -Destination (Join-Path $ICU_LIB_DIR $pair[1])
+            Write-Host "  Copied: $($pair[0]) -> $($pair[1])"
+        }
+    }
 }
 
 if ($Platform -eq "x86") {

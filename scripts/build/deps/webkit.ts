@@ -358,12 +358,13 @@ export const webkit: Dependency = {
       args.ICU_LIBRARY = slash(resolve(icu, "lib"));
       args.ICU_INCLUDE_DIR = slash(resolve(icu, "include"));
       // cmake FindICU searches for icudtd (debug) first, then icudt.
-      // Our build only ships icudt.lib (no debug suffix), so the
-      // first-run search with --fresh fails for the data component.
-      // Pre-set both cache slots to the same path.
-      const icuData = slash(resolve(icu, "lib", "icudt.lib"));
-      args.ICU_DATA_LIBRARY_RELEASE = icuData;
-      args.ICU_DATA_LIBRARY_DEBUG = icuData;
+      // Our build normally ships only icudt.lib (no debug suffix), so the
+      // first-run search with --fresh fails for the data component. Pre-set
+      // both cache slots. ASAN builds also emit icudtd.lib (see build-icu.ps1
+      // UseDynamicCRT), so point Debug at it.
+      const icuLib = resolve(icu, "lib");
+      args.ICU_DATA_LIBRARY_RELEASE = slash(resolve(icuLib, "icudt.lib"));
+      args.ICU_DATA_LIBRARY_DEBUG = slash(resolve(icuLib, cfg.asan ? "icudtd.lib" : "icudt.lib"));
       // U_STATIC_IMPLEMENTATION: ICU headers default to dllimport; we
       // link statically. Matches what the old cmake's SetupWebKit did.
       // Static build defines to suppress __declspec(dllimport) in headers.

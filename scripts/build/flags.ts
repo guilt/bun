@@ -1492,7 +1492,21 @@ export const linkerFlags: Flag[] = [
     ],
     when: c => c.freebsd,
     desc: "Dynamic symbol list + version script (FreeBSD adds environ/__progname)",
-  },
+    },
+    {
+    // Link the i586 ASAN runtime explicitly. Our link rule passes $ldflags
+    // AFTER /link, so clang-cl's driver never sees -fsanitize=address there to
+    // auto-link the runtime (leaving every __asan_* undefined). Instead, add
+    // the import libs directly (valid linker inputs). The libs come from the
+    // custom resource dir set up by deps/asan.ts (clang's stock dir is x86_64
+    // only). The thunk must come before the dynamic lib.
+    flag: c => [
+      join(c.buildDir, "clang-rt-i586", "lib", "i586-pc-windows-msvc", "clang_rt.asan_dynamic_runtime_thunk.lib"),
+      join(c.buildDir, "clang-rt-i586", "lib", "i586-pc-windows-msvc", "clang_rt.asan_dynamic.lib"),
+    ],
+    when: c => c.windows && c.x86 && c.asan,
+    desc: "Explicitly link clang_rt.asan_dynamic*.lib (clang-cl driver can't resolve it after /link)",
+    },
 ];
 
 /**
