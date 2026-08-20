@@ -107,14 +107,20 @@ export const icu: Dependency = {
     const srcDir = icuSrcDir(cfg);
     const platform = cfg.x64 ? "x64" : cfg.x86 ? "x86" : "ARM64";
     const script = resolve(cfg.cwd, "scripts", "build", "deps", "icu", "build-icu.ps1");
+    // ASAN: build ICU with the Release config so it uses /MD (MultiThreadedDLL,
+    // _ITERATOR_DEBUG_LEVEL=0), matching the /MD used across bun + WebKit.
+    // Debug ICU would produce /MDd (level 2) and fail the link.
+    const icuBuildType = cfg.asan ? "Release" : cfg.debug ? "Debug" : "Release";
+    const dynCrt = cfg.asan ? "-UseDynamicCRT" : "";
     return {
       kind: "script",
       command: [
         "powershell", "-ExecutionPolicy", "Bypass", "-File", script,
         "-SourceDir", srcDir,
         "-Platform", platform,
-        "-BuildType", cfg.debug ? "Debug" : "Release",
+        "-BuildType", icuBuildType,
         "-OutputDir", out,
+        ...(dynCrt ? [dynCrt] : []),
       ],
       cwd: srcDir,
       outputs: localIcuLibs(cfg),

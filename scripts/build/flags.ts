@@ -222,17 +222,25 @@ export const globalFlags: Flag[] = [
   // ─── MSVC runtime (Windows) ───
   {
     flag: "/MTd",
-    when: c => c.windows && c.debug,
+    when: c => c.windows && c.debug && !c.asan,
     desc: "Static debug MSVC runtime",
   },
   {
     flag: "/MT",
-    when: c => c.windows && c.release,
+    when: c => c.windows && c.release && !c.asan,
     desc: "Static MSVC runtime",
+  },
+  // AddressSanitizer requires the *release* dynamic CRT (/MD); clang-cl
+  // rejects debug runtimes with -fsanitize=address. ASAN is a debug-only
+  // tool (not the XP-compat deliverable), so this only applies when asan=on.
+  {
+    flag: "/MD",
+    when: c => c.windows && c.asan,
+    desc: "Dynamic MSVC runtime (required by AddressSanitizer)",
   },
   {
     flag: "/U_DLL",
-    when: c => c.windows,
+    when: c => c.windows && !c.asan,
     desc: "Undefine _DLL (we link statically)",
   },
 
@@ -315,6 +323,14 @@ export const globalFlags: Flag[] = [
     flag: "-fsanitize=address",
     when: c => c.asan,
     desc: "AddressSanitizer (also forwarded to deps for ABI consistency)",
+  },
+  // i586: LLVM's clang resource dir has no i386 ASAN runtime (x86_64 only).
+  // Use the MSVC-bundled one, placed in <buildDir>/clang-rt-i586/. See
+  // scripts/build/deps/asan.ts (or run script/setup-asan-i586.ps1).
+  {
+    flag: c => `-resource-dir=${slash(join(c.buildDir, "clang-rt-i586"))}`,
+    when: c => c.windows && c.x86 && c.asan,
+    desc: "Point clang-cl at the i586 ASAN runtime libs",
   },
 
   // ─── C++ language behavior ───

@@ -21,7 +21,12 @@ param(
     # Pre-fetched ICU source checkout (the dep pipeline has already applied
     # vendor-patches/icu). When set, the script builds it in place instead of
     # downloading/extracting its own copy.
-    [string]$SourceDir = ""
+    [string]$SourceDir = "",
+
+    # ASAN: use the dynamic MSVC runtime (/MD) instead of the static /MT that
+    # the win9x XP-compat build normally needs. clang-cl's AddressSanitizer
+    # requires the dynamic CRT; keeping ICU static-CRT would mismatch at link.
+    [switch]$UseDynamicCRT = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -198,11 +203,11 @@ function Patch-IcuVcxProj {
     # DynamicLibrary -> StaticLibrary
     $content = $content -replace '<ConfigurationType>DynamicLibrary</ConfigurationType>', '<ConfigurationType>StaticLibrary</ConfigurationType>'
 
-    # MultiThreadedDLL -> MultiThreaded
-    $content = $content -replace '<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>', '<RuntimeLibrary>MultiThreaded</RuntimeLibrary>'
-
-    # MultiThreadedDebugDLL -> MultiThreadedDebug
-    $content = $content -replace '<RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>', '<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>'
+    # MultiThreadedDLL -> MultiThreaded  (unless ASAN, which needs the dynamic /MD CRT)
+    if (-not $UseDynamicCRT) {
+        $content = $content -replace '<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>', '<RuntimeLibrary>MultiThreaded</RuntimeLibrary>'
+        $content = $content -replace '<RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>', '<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>'
+    }
 
     # Add U_STATIC_IMPLEMENTATION
     if ($content -notmatch 'U_STATIC_IMPLEMENTATION') {

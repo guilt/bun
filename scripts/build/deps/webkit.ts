@@ -358,7 +358,7 @@ export const webkit: Dependency = {
       args.ICU_LIBRARY = slash(resolve(icu, "lib"));
       args.ICU_INCLUDE_DIR = slash(resolve(icu, "include"));
       // cmake FindICU searches for icudtd (debug) first, then icudt.
-      // Our debug build only ships icudt.lib (no debug suffix), so the
+      // Our build only ships icudt.lib (no debug suffix), so the
       // first-run search with --fresh fails for the data component.
       // Pre-set both cache slots to the same path.
       const icuData = slash(resolve(icu, "lib", "icudt.lib"));
@@ -382,12 +382,29 @@ export const webkit: Dependency = {
         args.CMAKE_CXX_COMPILER_TARGET = "i586-pc-windows-msvc";
         args.CLANG_BUILTINS_LIBRARY = "";
       }
-      args.CMAKE_C_FLAGS = `/DU_STATIC_IMPLEMENTATION ${staticFlags} ${mallocFlags} ${optFlagStr}`.trim();
-      args.CMAKE_CXX_FLAGS = `/DU_STATIC_IMPLEMENTATION ${staticFlags} ${mallocFlags} /clang:-fno-c++-static-destructors ${optFlagStr}`.trim();
+      // ASAN: instrument WebKit too (ABI-consistent with bun) and point both
+      // compile and link at the i586 ASAN runtime via -resource-dir.
+      const asanFlags = cfg.asan
+        ? `-fsanitize=address -resource-dir=${slash(join(cfg.buildDir, "clang-rt-i586"))}`
+        : "";
+      args.CMAKE_C_FLAGS = `/DU_STATIC_IMPLEMENTATION ${staticFlags} ${mallocFlags} ${optFlagStr} ${asanFlags}`.trim();
+      args.CMAKE_CXX_FLAGS = `/DU_STATIC_IMPLEMENTATION ${staticFlags} ${mallocFlags} /clang:-fno-c++-static-destructors ${optFlagStr} ${asanFlags}`.trim();
+      if (cfg.asan) {
+        // cmake links WebKit with lld-link directly (not clang-cl), so the
+        // ASAN runtime is not auto-linked. Add the runtime thunk + dynamic
+        // lib from the mirrored resource dir.
+        const rtDir = join(cfg.buildDir, "clang-rt-i586", "lib", "i586-pc-windows-msvc");
+        const rtLink = `-libpath:${slash(rtDir)} clang_rt.asan_dynamic_runtime_thunk.lib clang_rt.asan_dynamic.lib`;
+        args.CMAKE_EXE_LINKER_FLAGS = rtLink;
+        args.CMAKE_SHARED_LINKER_FLAGS = rtLink;
+      }
       // Static CRT to match bun + all other deps (we build everything
       // with /MTd or /MT). Without this, cmake defaults to /MDd →
-      // RuntimeLibrary mismatch at link.
-      args.CMAKE_MSVC_RUNTIME_LIBRARY = cfg.debug ? "MultiThreadedDebug" : "MultiThreaded";
+      // RuntimeLibrary mismatch at link. AddressSanitizer needs the release
+      // dynamic CRT (/MD), so switch for asan builds.
+      args.CMAKE_MSVC_RUNTIME_LIBRARY = cfg.asan
+        ? "MultiThreadedDLL"
+        : (cfg.debug ? "MultiThreadedDebug" : "MultiThreaded");
       // WebKit's cmake runs find_package(Perl) for its generate-lut-files /
       // hash-table scripts, which finds perl via $PERL_EXECUTABLE or PATH.
       // Point it at the same perl the LUT codegen uses so configure works on

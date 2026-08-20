@@ -358,12 +358,24 @@ pub mod default_alloc {
         if align <= crate::MAX_ALIGN_T {
             return unsafe { libc::malloc(size) };
         }
-        let mut p: *mut c_void = core::ptr::null_mut();
         let align = align.max(core::mem::size_of::<*mut c_void>());
-        if unsafe { libc::posix_memalign(&mut p, align, size) } != 0 {
-            return core::ptr::null_mut();
+        #[cfg(target_os = "windows")]
+        {
+            // Windows: use the CRT's _aligned_malloc (posix_memalign is POSIX-only).
+            unsafe extern "C" {
+                fn _aligned_malloc(size: usize, alignment: usize) -> *mut c_void;
+            }
+            // SAFETY: _aligned_malloc(size, alignment); alignment must be a power of two.
+            return unsafe { _aligned_malloc(size, align) };
         }
-        p
+        #[cfg(not(target_os = "windows"))]
+        {
+            let mut p: *mut c_void = core::ptr::null_mut();
+            if unsafe { libc::posix_memalign(&mut p, align, size) } != 0 {
+                return core::ptr::null_mut();
+            }
+            p
+        }
     }
 
     #[cfg(not(bun_asan))]
@@ -411,7 +423,17 @@ pub mod default_alloc {
             unsafe {
                 let copy = usable_size(ptr).min(new_size);
                 core::ptr::copy_nonoverlapping(ptr.cast::<u8>(), new_ptr.cast::<u8>(), copy);
-                libc::free(ptr);
+                #[cfg(target_os = "windows")]
+                {
+                    unsafe extern "C" {
+                        fn _aligned_free(memptr: *mut c_void);
+                    }
+                    _aligned_free(ptr);
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    libc::free(ptr);
+                }
             }
         }
         new_ptr

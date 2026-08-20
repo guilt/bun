@@ -30,6 +30,7 @@ import { registerAllRules } from "./rules.ts";
 import { quote } from "./shell.ts";
 import { findBun, findCargo, findMsvcLinker, findPerl, findSystemTool, resolveLlvmToolchain } from "./tools.ts";
 import { ensureWindowsSysroot } from "./winsysroot.ts";
+import { ensureI586AsanRuntime } from "./deps/asan.ts";
 import { checkWorkarounds } from "./workarounds.ts";
 
 /**
@@ -280,6 +281,13 @@ export async function configure(input: ConfigureInput): Promise<ConfigureResult>
   mark("ensureMacosSdk");
 
   checkWorkarounds(cfg);
+
+  // i586 ASAN: mirror the clang resource dir + add the MSVC i386 ASAN runtime
+  // so the -resource-dir override (flags.ts) resolves at compile/link time.
+  if (cfg.windows && cfg.x86 && cfg.asan) {
+    ensureI586AsanRuntime(cfg, toolchain);
+    mark("ensureI586AsanRuntime");
+  }
 
   // Windows cross-compile: make sure the MSVC CRT + Windows SDK splat is
   // usable BEFORE the graph is emitted — emitBun() enumerates its include
