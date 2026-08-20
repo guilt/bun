@@ -475,13 +475,19 @@ export function emitRust(n: Ninja, cfg: Config, inputs: RustBuildInputs): string
   // the C++ `ASAN_ENABLED` macro so Global::exit() picks the same libc exit
   // path (`exit` vs `quick_exit`) that c-bindings.cpp registered Bun__onExit on.
   rustflags.push("--check-cfg=cfg(bun_asan)");
-  if (cfg.asan) {
-    // Match the C/C++ side's instrumentation so cross-language stack traces
-    // and shadow-memory bookkeeping agree. Nightly-only flag; the pinned
-    // toolchain in `rust-toolchain.toml` is nightly.
-    rustflags.push("-Zsanitizer=address");
-    rustflags.push("--cfg=bun_asan");
-  }
+if (cfg.asan) {
+// Match the C/C++ side's instrumentation so cross-language stack traces
+// and shadow-memory bookkeeping agree. Nightly-only flag; the pinned
+// toolchain in `rust-toolchain.toml` is nightly.
+rustflags.push("-Zsanitizer=address");
+rustflags.push("--cfg=bun_asan");
+// Bun stores embedded JS module strings as adjacent `alloc_<hash>` globals;
+// a BunString legitimately spans several of them. ASAN puts a redzone
+// between every global, so cross-global reads are falsely reported as
+// global-buffer-overflow. Disable global redzones so ASAN surfaces the real
+// heap bugs (mirrors the `-mllvm -asan-globals=0` on the C/C++ side).
+rustflags.push("-Cllvm-args=-asan-globals=0");
+}
   // `bun_debug`: the cargo profile is `dev` (a Debug-buildtype build).
   // `bun_core::env::IS_DEBUG` and `build_options::ENABLE_LOGS` key on this
   // instead of `cfg!(debug_assertions)` so that release-asan /

@@ -1356,9 +1356,10 @@ pub mod package_manifest {
                 [0u8; ("18446744073709551615".len() * 2) + "_".len() + ".npm".len() + 1];
             let mut dest_path_stream = bun_io::FixedBufferStream::new_mut(&mut dest_path_buf);
             let file_id_hex_fmt = bun_fmt::hex_int_lower::<16>(file_id);
-            let hex_timestamp: usize =
-                usize::try_from(bun_core::time::milli_timestamp().max(0)).expect("int cast");
-            let hex_timestamp_fmt = bun_fmt::hex_int_lower::<16>(hex_timestamp as u64);
+            // A millisecond epoch timestamp (>= 4.3e9 since 2001) overflows
+            // `usize` on 32-bit targets — keep it in `u64`, not `usize`.
+            let hex_timestamp: u64 = bun_core::time::milli_timestamp().max(0) as u64;
+            let hex_timestamp_fmt = bun_fmt::hex_int_lower::<16>(hex_timestamp);
             write!(
                 dest_path_stream,
                 "{}.npm-{}",

@@ -324,6 +324,16 @@ export const globalFlags: Flag[] = [
     when: c => c.asan,
     desc: "AddressSanitizer (also forwarded to deps for ABI consistency)",
   },
+  // Bun stores embedded JS module strings as adjacent `alloc_<hash>` globals;
+  // a BunString legitimately spans several of them. ASAN puts a redzone
+  // between every global, so such cross-global reads get falsely reported as
+  // global-buffer-overflow. Disable global redzones so ASAN focuses on the
+  // real heap bugs (stack/heap-buffer-overflow, use-after-free).
+  {
+    flag: "-mllvm -asan-globals=0",
+    when: c => c.windows && c.asan,
+    desc: "Disable ASAN global redzones (Bun's packed embedded-string globals trip them)",
+  },
   // i586: LLVM's clang resource dir has no i386 ASAN runtime (x86_64 only).
   // Use the MSVC-bundled one, placed in <buildDir>/clang-rt-i586/. See
   // scripts/build/deps/asan.ts (or run script/setup-asan-i586.ps1).
