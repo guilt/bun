@@ -931,17 +931,18 @@ mod zs_tags {
 }
 #[cfg(target_pointer_width = "32")]
 mod zs_tags {
-    // The STATIC pointer-tag is UNUSED on 32-bit: static strings use the
-    // BunString tag byte (BunStringTag::StaticZigString), and no code calls
-    // mark_static/is_static on a ZigString pointer. Bit 28 is therefore a real
-    // address bit (the win9x process's JS string buffers sit at ~330 MB, above
-    // the old 268 MB limit). Tags live in bits 29-31 → 512 MB addressable.
-    pub const ZS_STATIC_BIT: usize = 0;
-    pub const ZS_UTF8_BIT: usize = 1 << 29;
-    pub const ZS_GLOBAL_BIT: usize = 1 << 30;
-    pub const ZS_16BIT_BIT: usize = 1 << 31;
-    // Keep the low 29 bits (clearing the 29-31 tag bits); bit 28 stays address.
-    pub const ZS_UNTAG_MASK: usize = (1 << 29) - 1;
+    // On 32-bit the tags live in the separate `ZigString::flags` field, NOT in
+    // pointer bits. A 32-bit heap pointer can be anywhere in [0, 2GB) (the win9x
+    // bundler passes 1.5GB+), so EVERY high address bit is a real address bit —
+    // tagging the pointer (as 64-bit does with bits 60-63) would corrupt any
+    // string above 512MB. Flag values (bit 0=utf8, 1=global, 2=16bit,
+    // 3=static):
+    pub const ZS_STATIC_BIT: u8 = 1 << 3;
+    pub const ZS_UTF8_BIT: u8 = 1 << 0;
+    pub const ZS_GLOBAL_BIT: u8 = 1 << 1;
+    pub const ZS_16BIT_BIT: u8 = 1 << 2;
+    // No pointer bits are tagged on 32-bit; untagging is the identity.
+    pub const ZS_UNTAG_MASK: usize = usize::MAX;
 }
 pub use zs_tags::*;
 
@@ -959,15 +960,26 @@ pub use zs_tags::*;
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ZigString {
-    /// Tagged pointer — never dereference directly; use `untagged()`.
+    /// Data pointer. On 64-bit targets the flag bits live in the pointer's high
+    /// bits (bits 60-63, free because addresses are < 2^47). On 32-bit targets
+    /// the pointer is never tagged — a 32-bit heap pointer can be anywhere in
+    /// [0, 2GB) and any high bit is a real address bit — so the flags live in
+    /// the separate `flags` field below.
     pub _unsafe_ptr_do_not_use: *const u8,
     pub len: usize,
+    /// 32-bit only: string-kind flags (see `zs_tags`). Keeps the FFI layout
+    /// `{ ptr, len }` on 64-bit unchanged while avoiding pointer-tag corruption
+    /// on 32-bit.
+    #[cfg(target_pointer_width = "32")]
+    pub flags: u8,
 }
 
 impl ZigString {
     pub const EMPTY: ZigString = ZigString {
         _unsafe_ptr_do_not_use: b"".as_ptr(),
         len: 0,
+        #[cfg(target_pointer_width = "32")]
+        flags: 0,
     };
 
     #[inline]
@@ -975,6 +987,8 @@ impl ZigString {
         ZigString {
             _unsafe_ptr_do_not_use: slice.as_ptr(),
             len: slice.len(),
+            #[cfg(target_pointer_width = "32")]
+            flags: 0,
         }
     }
 
@@ -985,6 +999,8 @@ impl ZigString {
         ZigString {
             _unsafe_ptr_do_not_use: ptr,
             len,
+            #[cfg(target_pointer_width = "32")]
+            flags: 0,
         }
     }
 
@@ -1000,6 +1016,8 @@ impl ZigString {
         let mut out = ZigString {
             _unsafe_ptr_do_not_use: items.as_ptr().cast(),
             len: items.len(),
+            #[cfg(target_pointer_width = "32")]
+            flags: 0,
         };
         out.mark_utf16();
         out
@@ -1016,45 +1034,109 @@ impl ZigString {
 
     #[inline]
     pub fn is_16bit(&self) -> bool {
-        (self._unsafe_ptr_do_not_use as usize) & ZS_16BIT_BIT != 0
+        #[cfg(target_pointer_width = "64")]
+        {
+            (self._unsafe_ptr_do_not_use as usize) & ZS_16BIT_BIT != 0
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            self.flags & ZS_16BIT_BIT != 0
+        }
     }
     #[inline]
     pub fn is_utf8(&self) -> bool {
-        (self._unsafe_ptr_do_not_use as usize) & ZS_UTF8_BIT != 0
+        #[cfg(target_pointer_width = "64")]
+        {
+            (self._unsafe_ptr_do_not_use as usize) & ZS_UTF8_BIT != 0
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            self.flags & ZS_UTF8_BIT != 0
+        }
     }
     #[inline]
     pub fn is_globally_allocated(&self) -> bool {
-        (self._unsafe_ptr_do_not_use as usize) & ZS_GLOBAL_BIT != 0
+        #[cfg(target_pointer_width = "64")]
+        {
+            (self._unsafe_ptr_do_not_use as usize) & ZS_GLOBAL_BIT != 0
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            self.flags & ZS_GLOBAL_BIT != 0
+        }
     }
     #[inline]
     pub fn is_static(&self) -> bool {
-        (self._unsafe_ptr_do_not_use as usize) & ZS_STATIC_BIT != 0
+        #[cfg(target_pointer_width = "64")]
+        {
+            (self._unsafe_ptr_do_not_use as usize) & ZS_STATIC_BIT != 0
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            self.flags & ZS_STATIC_BIT != 0
+        }
     }
     #[inline]
     pub fn mark_utf16(&mut self) {
-        self._unsafe_ptr_do_not_use =
-            ((self._unsafe_ptr_do_not_use as usize) | ZS_16BIT_BIT) as *const u8;
+        #[cfg(target_pointer_width = "64")]
+        {
+            self._unsafe_ptr_do_not_use =
+                ((self._unsafe_ptr_do_not_use as usize) | ZS_16BIT_BIT) as *const u8;
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            self.flags |= ZS_16BIT_BIT;
+        }
     }
     #[inline]
     pub fn mark_utf8(&mut self) {
-        self._unsafe_ptr_do_not_use =
-            ((self._unsafe_ptr_do_not_use as usize) | ZS_UTF8_BIT) as *const u8;
+        #[cfg(target_pointer_width = "64")]
+        {
+            self._unsafe_ptr_do_not_use =
+                ((self._unsafe_ptr_do_not_use as usize) | ZS_UTF8_BIT) as *const u8;
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            self.flags |= ZS_UTF8_BIT;
+        }
     }
     #[inline]
     pub fn mark_global(&mut self) {
-        self._unsafe_ptr_do_not_use =
-            ((self._unsafe_ptr_do_not_use as usize) | ZS_GLOBAL_BIT) as *const u8;
+        #[cfg(target_pointer_width = "64")]
+        {
+            self._unsafe_ptr_do_not_use =
+                ((self._unsafe_ptr_do_not_use as usize) | ZS_GLOBAL_BIT) as *const u8;
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            self.flags |= ZS_GLOBAL_BIT;
+        }
     }
     #[inline]
     pub fn mark_static(&mut self) {
-        self._unsafe_ptr_do_not_use =
-            ((self._unsafe_ptr_do_not_use as usize) | ZS_STATIC_BIT) as *const u8;
+        #[cfg(target_pointer_width = "64")]
+        {
+            self._unsafe_ptr_do_not_use =
+                ((self._unsafe_ptr_do_not_use as usize) | ZS_STATIC_BIT) as *const u8;
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            self.flags |= ZS_STATIC_BIT;
+        }
     }
 
-    /// Strip the flag bits — truncate to the low 53 bits.
+    /// Strip the flag bits — truncate to the low 53 bits (64-bit) or return the
+    /// pointer untouched (32-bit: pointers are never tagged).
     #[inline]
     pub fn untagged(ptr: *const u8) -> *const u8 {
-        ((ptr as usize) & ZS_UNTAG_MASK) as *const u8
+        #[cfg(target_pointer_width = "64")]
+        {
+            ((ptr as usize) & ZS_UNTAG_MASK) as *const u8
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            ptr
+        }
     }
 
     /// 8-bit byte view (latin1 or utf8). Caller must ensure `!is_16bit()`.

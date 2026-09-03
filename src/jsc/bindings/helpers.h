@@ -33,47 +33,24 @@ namespace Zig {
 // rest we zero out for consistentcy
 // On 32-bit targets the pointer is only 32 bits wide, so the tag bits move
 // down to 28-31 (matching `bun_alloc::ZigString` on 32-bit): static=28,
-// utf8=29, global=30, utf16=31.
-#if CPU(ADDRESS64)
+// 32-bit ZigString flags-field bits (must match bun_alloc's Rust zs_tags):
+// utf8=0x1, global=0x2, utf16=0x4, static=0x8.
+#if !CPU(ADDRESS64)
+constexpr unsigned char ZigStringFlagUTF8 = 0x1;
+constexpr unsigned char ZigStringFlagGlobal = 0x2;
+constexpr unsigned char ZigStringFlagUTF16 = 0x4;
+constexpr unsigned char ZigStringFlagStatic = 0x8;
+#endif
+
 static const unsigned char* untag(const unsigned char* ptr)
 {
+#if CPU(ADDRESS64)
     return reinterpret_cast<const unsigned char*>(
         (((reinterpret_cast<uintptr_t>(ptr) & ~(static_cast<uint64_t>(1) << 63) & ~(static_cast<uint64_t>(1) << 62)) & ~(static_cast<uint64_t>(1) << 61)) & ~(static_cast<uint64_t>(1) << 60)));
-}
-
-static void* untagVoid(const unsigned char* ptr)
-{
-    return const_cast<void*>(reinterpret_cast<const void*>(untag(ptr)));
-}
-
-static void* untagVoid(const char16_t* ptr)
-{
-    return untagVoid(reinterpret_cast<const unsigned char*>(ptr));
-}
-
-static bool isTaggedUTF16Ptr(const unsigned char* ptr)
-{
-    return (reinterpret_cast<uintptr_t>(ptr) & (static_cast<uint64_t>(1) << 63)) != 0;
-}
-
-// Do we need to convert the string from UTF-8 to UTF-16?
-static bool isTaggedUTF8Ptr(const unsigned char* ptr)
-{
-    return (reinterpret_cast<uintptr_t>(ptr) & (static_cast<uint64_t>(1) << 61)) != 0;
-}
-
-static bool isTaggedExternalPtr(const unsigned char* ptr)
-{
-    return (reinterpret_cast<uintptr_t>(ptr) & (static_cast<uint64_t>(1) << 62)) != 0;
-}
 #else
-static const unsigned char* untag(const unsigned char* ptr)
-{
-    // 32-bit: tags live in bits 29-31 (utf16=31, global=30, utf8=29). Bit 28
-    // is a real address bit (win9x JS string buffers sit at ~330 MB), so it is
-    // NOT cleared here — clearing it corrupted pointers above 268 MB.
-    return reinterpret_cast<const unsigned char*>(
-        (reinterpret_cast<uintptr_t>(ptr) & ~(static_cast<uintptr_t>(1) << 31) & ~(static_cast<uintptr_t>(1) << 30) & ~(static_cast<uintptr_t>(1) << 29)));
+    // 32-bit: pointers are never tagged (flags live in the ZigString field).
+    return ptr;
+#endif
 }
 
 static void* untagVoid(const unsigned char* ptr)
@@ -86,22 +63,33 @@ static void* untagVoid(const char16_t* ptr)
     return untagVoid(reinterpret_cast<const unsigned char*>(ptr));
 }
 
-static bool isTaggedUTF16Ptr(const unsigned char* ptr)
+static bool isTaggedUTF16Ptr(const ZigString& str)
 {
-    return (reinterpret_cast<uintptr_t>(ptr) & (static_cast<uintptr_t>(1) << 31)) != 0;
+#if CPU(ADDRESS64)
+    return (reinterpret_cast<uintptr_t>(str.ptr) & (static_cast<uint64_t>(1) << 63)) != 0;
+#else
+    return (str.flags & ZigStringFlagUTF16) != 0;
+#endif
 }
 
 // Do we need to convert the string from UTF-8 to UTF-16?
-static bool isTaggedUTF8Ptr(const unsigned char* ptr)
+static bool isTaggedUTF8Ptr(const ZigString& str)
 {
-    return (reinterpret_cast<uintptr_t>(ptr) & (static_cast<uintptr_t>(1) << 29)) != 0;
+#if CPU(ADDRESS64)
+    return (reinterpret_cast<uintptr_t>(str.ptr) & (static_cast<uint64_t>(1) << 61)) != 0;
+#else
+    return (str.flags & ZigStringFlagUTF8) != 0;
+#endif
 }
 
-static bool isTaggedExternalPtr(const unsigned char* ptr)
+static bool isTaggedExternalPtr(const ZigString& str)
 {
-    return (reinterpret_cast<uintptr_t>(ptr) & (static_cast<uintptr_t>(1) << 30)) != 0;
-}
+#if CPU(ADDRESS64)
+    return (reinterpret_cast<uintptr_t>(str.ptr) & (static_cast<uint64_t>(1) << 62)) != 0;
+#else
+    return (str.flags & ZigStringFlagGlobal) != 0;
 #endif
+}
 
 static void free_global_string(void* str, void* ptr, unsigned len)
 {
@@ -118,8 +106,8 @@ static const WTF::String toString(ZigString str)
     if (str.len == 0 || str.ptr == nullptr) {
         return WTF::String();
     }
-    if (isTaggedUTF8Ptr(str.ptr)) [[unlikely]] {
-        ASSERT_WITH_MESSAGE(!isTaggedExternalPtr(str.ptr), "UTF8 and external ptr are mutually exclusive. The external will never be freed.");
+    if (isTaggedUTF8Ptr(str)) [[unlikely]] {
+        ASSERT_WITH_MESSAGE(!isTaggedExternalPtr(str), "UTF8 and external ptr are mutually exclusive. The external will never be freed.");
         // Check if the resulting UTF-16 string could possibly exceed the maximum length.
         // For valid UTF-8, the number of UTF-16 code units is <= the number of UTF-8 bytes
         // (ASCII is 1:1; other code points use multiple UTF-8 bytes per UTF-16 code unit).
@@ -135,14 +123,14 @@ static const WTF::String toString(ZigString str)
         return WTF::String::fromUTF8ReplacingInvalidSequences(std::span { untag(str.ptr), str.len });
     }
 
-    if (isTaggedExternalPtr(str.ptr)) [[unlikely]] {
+    if (isTaggedExternalPtr(str)) [[unlikely]] {
         // This will fail if the string is too long. Let's make it explicit instead of an ASSERT.
         if (str.len > Bun__stringSyntheticAllocationLimit || str.len > WTF::String::MaxLength) [[unlikely]] {
             free_global_string(nullptr, reinterpret_cast<void*>(const_cast<unsigned char*>(untag(str.ptr))), static_cast<unsigned>(str.len));
             return {};
         }
 
-        return !isTaggedUTF16Ptr(str.ptr)
+        return !isTaggedUTF16Ptr(str)
             ? WTF::String(WTF::ExternalStringImpl::create({ untag(str.ptr), str.len }, untagVoid(str.ptr), free_global_string))
             : WTF::String(WTF::ExternalStringImpl::create({ reinterpret_cast<const char16_t*>(untag(str.ptr)), str.len }, untagVoid(str.ptr), free_global_string));
     }
@@ -152,7 +140,7 @@ static const WTF::String toString(ZigString str)
         return {};
     }
 
-    return !isTaggedUTF16Ptr(str.ptr)
+    return !isTaggedUTF16Ptr(str)
         ? WTF::String(WTF::StringImpl::createWithoutCopying({ untag(str.ptr), str.len }))
         : WTF::String(WTF::StringImpl::createWithoutCopying(
               { reinterpret_cast<const char16_t*>(untag(str.ptr)), str.len }));
@@ -161,7 +149,7 @@ static const WTF::String toString(ZigString str)
 static WTF::AtomString toAtomString(ZigString str)
 {
 
-    if (!isTaggedUTF16Ptr(str.ptr)) {
+    if (!isTaggedUTF16Ptr(str)) {
         return makeAtomString(std::span<const Latin1Character>(untag(str.ptr), str.len));
     } else {
         return makeAtomString(std::span<const char16_t>(reinterpret_cast<const char16_t*>(untag(str.ptr)), str.len));
@@ -173,7 +161,7 @@ static const WTF::String toString(ZigString str, StringPointer ptr)
     if (str.len == 0 || str.ptr == nullptr || ptr.len == 0) {
         return WTF::String();
     }
-    if (isTaggedUTF8Ptr(str.ptr)) [[unlikely]] {
+    if (isTaggedUTF8Ptr(str)) [[unlikely]] {
         // Check if the resulting UTF-16 string could possibly exceed the maximum length.
         size_t maxLength = std::min(Bun__stringSyntheticAllocationLimit, static_cast<size_t>(WTF::String::MaxLength));
         if (ptr.len > maxLength) [[unlikely]] {
@@ -190,7 +178,7 @@ static const WTF::String toString(ZigString str, StringPointer ptr)
         return {};
     }
 
-    return !isTaggedUTF16Ptr(str.ptr)
+    return !isTaggedUTF16Ptr(str)
         ? WTF::String(WTF::StringImpl::createWithoutCopying({ &untag(str.ptr)[ptr.off], ptr.len }))
         : WTF::String(WTF::StringImpl::createWithoutCopying(
               { &reinterpret_cast<const char16_t*>(untag(str.ptr))[ptr.off], ptr.len }));
@@ -201,7 +189,7 @@ static const WTF::String toStringCopy(ZigString str, StringPointer ptr)
     if (str.len == 0 || str.ptr == nullptr || ptr.len == 0) {
         return WTF::String();
     }
-    if (isTaggedUTF8Ptr(str.ptr)) [[unlikely]] {
+    if (isTaggedUTF8Ptr(str)) [[unlikely]] {
         // Check if the resulting UTF-16 string could possibly exceed the maximum length.
         size_t maxLength = std::min(Bun__stringSyntheticAllocationLimit, static_cast<size_t>(WTF::String::MaxLength));
         if (ptr.len > maxLength) [[unlikely]] {
@@ -218,7 +206,7 @@ static const WTF::String toStringCopy(ZigString str, StringPointer ptr)
         return {};
     }
 
-    return !isTaggedUTF16Ptr(str.ptr)
+    return !isTaggedUTF16Ptr(str)
         ? WTF::String(WTF::StringImpl::create(std::span { &untag(str.ptr)[ptr.off], ptr.len }))
         : WTF::String(WTF::StringImpl::create(
               std::span { &reinterpret_cast<const char16_t*>(untag(str.ptr))[ptr.off], ptr.len }));
@@ -229,7 +217,7 @@ static const WTF::String toStringCopy(ZigString str)
     if (str.len == 0 || str.ptr == nullptr) {
         return WTF::String();
     }
-    if (isTaggedUTF8Ptr(str.ptr)) [[unlikely]] {
+    if (isTaggedUTF8Ptr(str)) [[unlikely]] {
         // Check if the resulting UTF-16 string could possibly exceed the maximum length.
         size_t maxLength = std::min(Bun__stringSyntheticAllocationLimit, static_cast<size_t>(WTF::String::MaxLength));
         if (str.len > maxLength) [[unlikely]] {
@@ -241,7 +229,7 @@ static const WTF::String toStringCopy(ZigString str)
         return WTF::String::fromUTF8ReplacingInvalidSequences(std::span { untag(str.ptr), str.len });
     }
 
-    if (isTaggedUTF16Ptr(str.ptr)) {
+    if (isTaggedUTF16Ptr(str)) {
         std::span<char16_t> out;
         auto impl = WTF::StringImpl::tryCreateUninitialized(str.len, out);
         if (!impl) [[unlikely]] {
@@ -264,7 +252,7 @@ static void appendToBuilder(ZigString str, WTF::StringBuilder& builder)
     if (str.len == 0 || str.ptr == nullptr) {
         return;
     }
-    if (isTaggedUTF8Ptr(str.ptr)) [[unlikely]] {
+    if (isTaggedUTF8Ptr(str)) [[unlikely]] {
         // Check if the resulting UTF-16 string could possibly exceed the maximum length.
         size_t maxLength = std::min(Bun__stringSyntheticAllocationLimit, static_cast<size_t>(WTF::String::MaxLength));
         if (str.len > maxLength) [[unlikely]] {
@@ -277,7 +265,7 @@ static void appendToBuilder(ZigString str, WTF::StringBuilder& builder)
         builder.append(converted);
         return;
     }
-    if (isTaggedUTF16Ptr(str.ptr)) {
+    if (isTaggedUTF16Ptr(str)) {
         builder.append({ reinterpret_cast<const char16_t*>(untag(str.ptr)), str.len });
         return;
     }
@@ -297,21 +285,52 @@ static JSC::JSString* toJSStringGC(ZigString str, JSC::JSGlobalObject* global)
     return JSC::jsString(global->vm(), toStringCopy(str));
 }
 
-static const ZigString ZigStringEmpty = ZigString { (unsigned char*)"", 0 };
+static const ZigString ZigStringEmpty = ZigString { (unsigned char*)"", 0
+#if !CPU(ADDRESS64)
+    , 0
+#endif
+};
 static const unsigned char __dot_char = '.';
-static const ZigString ZigStringCwd = ZigString { &__dot_char, 1 };
+static const ZigString ZigStringCwd = ZigString { &__dot_char, 1
+#if !CPU(ADDRESS64)
+    , 0
+#endif
+};
 static const BunString BunStringCwd = BunString { BunStringTag::StaticZigString, ZigStringCwd };
 static const BunString BunStringEmpty = BunString { BunStringTag::Empty, nullptr };
 
 #if CPU(ADDRESS64)
 static const unsigned char* taggedUTF16Ptr(const char16_t* ptr)
 {
-    return reinterpret_cast<const unsigned char*>(reinterpret_cast<uintptr_t>(ptr) | (static_cast<uint64_t>(1) << 63));
+return reinterpret_cast<const unsigned char*>(reinterpret_cast<uintptr_t>(ptr) | (static_cast<uint64_t>(1) << 63));
 }
 #else
+// 32-bit: pointers are never tagged; UTF-16 is marked via ZigString::flags.
 static const unsigned char* taggedUTF16Ptr(const char16_t* ptr)
 {
-    return reinterpret_cast<const unsigned char*>(reinterpret_cast<uintptr_t>(ptr) | (static_cast<uintptr_t>(1) << 31));
+return reinterpret_cast<const unsigned char*>(ptr);
+}
+#endif
+
+// ZigString construction with the UTF-16/UTF-8 kind flag. 64-bit tags the
+// pointer; 32-bit sets the `flags` field.
+#if CPU(ADDRESS64)
+static ZigString makeZigString8(const unsigned char* data, size_t len)
+{
+    return ZigString { data, len };
+}
+static ZigString makeZigString16(const char16_t* data, size_t len)
+{
+    return ZigString { taggedUTF16Ptr(data), len };
+}
+#else
+static ZigString makeZigString8(const unsigned char* data, size_t len)
+{
+    return ZigString { data, len, 0 };
+}
+static ZigString makeZigString16(const char16_t* data, size_t len)
+{
+    return ZigString { reinterpret_cast<const unsigned char*>(data), len, ZigStringFlagUTF16 };
 }
 #endif
 
@@ -319,16 +338,14 @@ static ZigString toZigString(WTF::String* str)
 {
     return str->isEmpty()
         ? ZigStringEmpty
-        : ZigString { str->is8Bit() ? str->span8().data() : taggedUTF16Ptr(str->span16().data()),
-              str->length() };
+        : str->is8Bit() ? makeZigString8(str->span8().data(), str->length()) : makeZigString16(str->span16().data(), str->length());
 }
 
 static ZigString toZigString(WTF::StringImpl& str)
 {
     return str.isEmpty()
         ? ZigStringEmpty
-        : ZigString { str.is8Bit() ? str.span8().data() : taggedUTF16Ptr(str.span16().data()),
-              str.length() };
+        : str.is8Bit() ? makeZigString8(str.span8().data(), str.length()) : makeZigString16(str.span16().data(), str.length());
 }
 
 // Overload for `StringImpl*` so callers like `toZigString(string.impl())` resolve here
@@ -338,24 +355,21 @@ static ZigString toZigString(const WTF::StringImpl* str)
 {
     return (!str || str->isEmpty())
         ? ZigStringEmpty
-        : ZigString { str->is8Bit() ? str->span8().data() : taggedUTF16Ptr(str->span16().data()),
-              str->length() };
+        : str->is8Bit() ? makeZigString8(str->span8().data(), str->length()) : makeZigString16(str->span16().data(), str->length());
 }
 
 static ZigString toZigString(WTF::StringView& str)
 {
     return str.isEmpty()
         ? ZigStringEmpty
-        : ZigString { str.is8Bit() ? str.span8().data() : taggedUTF16Ptr(str.span16().data()),
-              str.length() };
+        : str.is8Bit() ? makeZigString8(str.span8().data(), str.length()) : makeZigString16(str.span16().data(), str.length());
 }
 
 static ZigString toZigString(const WTF::StringView& str)
 {
     return str.isEmpty()
         ? ZigStringEmpty
-        : ZigString { str.is8Bit() ? str.span8().data() : taggedUTF16Ptr(str.span16().data()),
-              str.length() };
+        : str.is8Bit() ? makeZigString8(str.span8().data(), str.length()) : makeZigString16(str.span16().data(), str.length());
 }
 
 static ZigString toZigString(JSC::JSString& str, JSC::JSGlobalObject* global)
@@ -422,11 +436,11 @@ static const WTF::String toStringStatic(ZigString str)
     if (str.len == 0 || str.ptr == nullptr) {
         return WTF::String();
     }
-    if (isTaggedUTF8Ptr(str.ptr)) [[unlikely]] {
+    if (isTaggedUTF8Ptr(str)) [[unlikely]] {
         abort();
     }
 
-    if (isTaggedUTF16Ptr(str.ptr)) {
+    if (isTaggedUTF16Ptr(str)) {
         return WTF::String(AtomStringImpl::add(std::span { reinterpret_cast<const char16_t*>(untag(str.ptr)), str.len }));
     }
 
@@ -481,7 +495,7 @@ static const JSC::Identifier toIdentifier(ZigString str, JSC::JSGlobalObject* gl
     if (str.len == 0 || str.ptr == nullptr) {
         return global->vm().propertyNames->emptyIdentifier;
     }
-    WTF::String wtfstr = Zig::isTaggedExternalPtr(str.ptr) ? toString(str) : Zig::toStringCopy(str);
+    WTF::String wtfstr = Zig::isTaggedExternalPtr(str) ? toString(str) : Zig::toStringCopy(str);
     JSC::Identifier id = JSC::Identifier::fromString(global->vm(), wtfstr);
     return id;
 }

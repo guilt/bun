@@ -67,11 +67,12 @@ pub struct String(pub bun_alloc::String);
 // C++ mirror: `struct BunString { BunStringTag tag; BunStringImpl impl; }`
 // (`headers-handwritten.h`); returned **by value** from every `BunString__*`
 // FFI below, so size/align drift is silent ABI corruption.
-// On 64-bit: 24 bytes, 8-byte aligned. On 32-bit: 12 bytes, 4-byte aligned.
+// On 64-bit: 24 bytes, 8-byte aligned. On 32-bit: 16 bytes, 4-byte aligned
+// (ZigString carries a `flags` field there, so BunStringImpl is 12 bytes).
 #[cfg(target_pointer_width = "64")]
 crate::assert_ffi_layout!(String, 24, 8);
 #[cfg(target_pointer_width = "32")]
-crate::assert_ffi_layout!(String, 12, 4);
+crate::assert_ffi_layout!(String, 16, 4);
 // FFI surface from `src/jsc/bindings/BunString.cpp`. All return a fresh
 // WTF-backed `String` with refcount = 1; caller must `deref()` (or transfer).
 unsafe extern "C" {

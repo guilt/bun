@@ -19,6 +19,14 @@ class String;
 typedef struct ZigString {
     const unsigned char* ptr;
     size_t len;
+#if !CPU(ADDRESS64)
+    // 32-bit only: string-kind flags (utf8=0x1, global=0x2, utf16=0x4,
+    // static=0x8). On 32-bit a heap pointer can be anywhere in [0, 2GB), so
+    // every high pointer bit is a real address bit — tagging the pointer (as
+    // 64-bit does) would corrupt any string above 512MB. Matches the Rust
+    // `bun_alloc::ZigString.flags` field.
+    unsigned char flags;
+#endif
 } ZigString;
 
 #ifndef __cplusplus

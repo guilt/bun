@@ -568,7 +568,7 @@ extern "C" [[ZIG_EXPORT(nothrow)]] void BunString__toWTFString(BunString* bunStr
 {
     WTF::String str;
     if (bunString->tag == BunStringTag::ZigString) {
-        if (Zig::isTaggedExternalPtr(bunString->impl.zig.ptr)) {
+        if (Zig::isTaggedExternalPtr(bunString->impl.zig)) {
             str = Zig::toString(bunString->impl.zig);
         } else {
             str = Zig::toStringCopy(bunString->impl.zig);
@@ -795,7 +795,7 @@ size_t BunString::utf8ByteLength(const WTF::String& str)
 WTF::String BunString::toWTFString() const
 {
     if (this->tag == BunStringTag::ZigString) {
-        if (Zig::isTaggedExternalPtr(this->impl.zig.ptr)) {
+        if (Zig::isTaggedExternalPtr(this->impl.zig)) {
             return Zig::toString(this->impl.zig);
         } else {
             return Zig::toStringCopy(this->impl.zig);
@@ -827,7 +827,7 @@ void BunString::appendToBuilder(WTF::StringBuilder& builder) const
 WTF::String BunString::toWTFString(ZeroCopyTag) const
 {
     if (this->tag == BunStringTag::ZigString) {
-        if (Zig::isTaggedUTF8Ptr(this->impl.zig.ptr)) {
+        if (Zig::isTaggedUTF8Ptr(this->impl.zig)) {
             return Zig::toStringCopy(this->impl.zig);
         } else {
             return Zig::toString(this->impl.zig);
@@ -856,7 +856,7 @@ WTF::String BunString::toWTFString(NonNullTag) const
 WTF::String BunString::transferToWTFString()
 {
     if (this->tag == BunStringTag::ZigString) {
-        if (Zig::isTaggedUTF8Ptr(this->impl.zig.ptr)) {
+        if (Zig::isTaggedUTF8Ptr(this->impl.zig)) {
             auto str = Zig::toStringCopy(this->impl.zig);
             *this = Zig::BunStringEmpty;
             return str;
