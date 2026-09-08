@@ -213,6 +213,9 @@ impl Function {
             writer.write_all(b"#define HAS_ARGUMENTS\n")?;
         }
 
+        #[cfg(target_arch = "x86")]
+        writer.write_all(b"#define BUN_FFI_JSVALUE32 1\n")?;
+
         'brk: {
             if self.return_type.is_floating_point() {
                 writer.write_all(b"#define USES_FLOAT 1\n")?;
@@ -369,6 +372,9 @@ impl Function {
         }
 
         writer.write_all(b"#define IS_CALLBACK 1\n")?;
+
+        #[cfg(target_arch = "x86")]
+        writer.write_all(b"#define BUN_FFI_JSVALUE32 1\n")?;
 
         'brk: {
             if self.return_type.is_floating_point() {

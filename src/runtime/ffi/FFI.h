@@ -3,15 +3,24 @@
 // https://github.com/oven-sh/bun/blob/main/src/runtime/api/FFI.h
 //
 // clang-format off
-// This file is only compatible with 64 bit CPUs
 // It must be kept in sync with JSCJSValue.h
 // https://github.com/oven-sh/WebKit/blob/main/Source/JavaScriptCore/runtime/JSCJSValue.h
 #ifdef IS_CALLBACK
 #define INJECT_BEFORE int c = 500; // This is a callback, so we need to inject code before the call
 #endif
 #define IS_BIG_ENDIAN 0
+
+// On 32-bit targets the JSC port uses USE_JSVALUE32_64 (NaN-boxing inside a
+// 64-bit box with a 32-bit tag in the high word and a 32-bit payload in the
+// low word), not USE_JSVALUE64. `BUN_FFI_JSVALUE32` is emitted by the thunk
+// codegen (`print_source_code`/`print_callback_source_code`) for 32-bit builds.
+#if defined(BUN_FFI_JSVALUE32)
+#define USE_JSVALUE64 0
+#define USE_JSVALUE32_64 1
+#else
 #define USE_JSVALUE64 1
 #define USE_JSVALUE32_64 0
+#endif
 
 #define ZIG_REPR_TYPE int64_t
 
@@ -30,9 +39,18 @@ typedef int int32_t;
 typedef unsigned int uint32_t;
 typedef long long int64_t;
 typedef unsigned long long uint64_t;
+// `size_t`/`intptr_t`/`uintptr_t` must match the real pointer width. On 32-bit
+// a 64-bit `size_t` would scale `LOAD_ARGUMENTS_FROM_CALL_FRAME`'s pointer
+// arithmetic by 8 and read the call frame 24 bytes past the arguments list.
+#if defined(BUN_FFI_JSVALUE32)
+typedef unsigned int size_t;
+typedef int intptr_t;
+typedef unsigned int uintptr_t;
+#else
 typedef unsigned long long size_t;
 typedef long intptr_t;
 typedef uint64_t uintptr_t;
+#endif
 typedef _Bool bool;
 
 #define true 1
@@ -130,8 +148,25 @@ napi_value asNapiValue;
   ZIG_REPR_TYPE asZigRepr;
 } EncodedJSValue;
 
+#if defined(BUN_FFI_JSVALUE32)
+// USE_JSVALUE32_64: 64-bit box, 32-bit tag in the high word, 32-bit payload in
+// the low word. Tags (JSCJSValue.h, USE(JSVALUE32_64) block).
+#define FFI32_INT32_TAG    0xFFFFFFFFu
+#define FFI32_BOOL_TAG     0xFFFFFFFEu
+#define FFI32_NULL_TAG     0xFFFFFFFDu
+#define FFI32_UNDEF_TAG    0xFFFFFFFCu
+#define FFI32_CELL_TAG     0xFFFFFFFBu
+#define FFI32_LOWEST_TAG   0xFFFFFFF7u
+#define FFI32_TAG(v)       ((uint32_t)((uint64_t)(v).asInt64 >> 32))
+#define FFI32_PAYLOAD(v)   ((uint32_t)(v).asInt64)
+#define FFI32_MAKE(t,p)    (((int64_t)(uint32_t)(t) << 32) | (uint32_t)(p))
+
+EncodedJSValue ValueUndefined = { FFI32_MAKE(FFI32_UNDEF_TAG, 0) };
+EncodedJSValue ValueTrue = { FFI32_MAKE(FFI32_BOOL_TAG, 1) };
+#else
 EncodedJSValue ValueUndefined = { TagValueUndefined };
 EncodedJSValue ValueTrue = { TagValueTrue };
+#endif
 
 typedef void* JSContext;
 
@@ -189,19 +224,36 @@ static void* JSVALUE_TO_TYPED_ARRAY_VECTOR(EncodedJSValue val) __attribute__((__
 static uint64_t JSVALUE_TO_TYPED_ARRAY_LENGTH(EncodedJSValue val) __attribute__((__always_inline__));
 
 static bool JSVALUE_IS_CELL(EncodedJSValue val) {
+#if defined(BUN_FFI_JSVALUE32)
+  return FFI32_TAG(val) == FFI32_CELL_TAG;
+#else
   return !(val.asInt64 & NotCellMask);
+#endif
 }
 
 static bool JSVALUE_IS_INT32(EncodedJSValue val) {
+#if defined(BUN_FFI_JSVALUE32)
+  return FFI32_TAG(val) == FFI32_INT32_TAG;
+#else
   return (val.asInt64 & NumberTag) == NumberTag;
+#endif
 }
 
 static bool JSVALUE_IS_NUMBER(EncodedJSValue val) {
+#if defined(BUN_FFI_JSVALUE32)
+  uint32_t tag = FFI32_TAG(val);
+  return tag == FFI32_INT32_TAG || tag < FFI32_LOWEST_TAG;
+#else
   return val.asInt64 & NumberTag;
+#endif
 }
 
 static uint8_t GET_JSTYPE(EncodedJSValue val) {
+#if defined(BUN_FFI_JSVALUE32)
+  return *(uint8_t*)((uint8_t*)(uintptr_t)FFI32_PAYLOAD(val) + JSCell__offsetOfType);
+#else
   return *(uint8_t*)((uint8_t*)val.asPtr + JSCell__offsetOfType);
+#endif
 }
 
 static bool JSTYPE_IS_TYPED_ARRAY(uint8_t type) {
@@ -213,11 +265,19 @@ static bool JSCELL_IS_TYPED_ARRAY(EncodedJSValue val) {
 }
 
 static void* JSVALUE_TO_TYPED_ARRAY_VECTOR(EncodedJSValue val) {
+#if defined(BUN_FFI_JSVALUE32)
+  return *(void**)((char*)(uintptr_t)FFI32_PAYLOAD(val) + JSArrayBufferView__offsetOfVector);
+#else
   return *(void**)((char*)val.asPtr + JSArrayBufferView__offsetOfVector);
+#endif
 }
 
 static uint64_t JSVALUE_TO_TYPED_ARRAY_LENGTH(EncodedJSValue val) {
+#if defined(BUN_FFI_JSVALUE32)
+  return *(uint64_t*)((char*)(uintptr_t)FFI32_PAYLOAD(val) + JSArrayBufferView__offsetOfLength);
+#else
   return *(uint64_t*)((char*)val.asPtr + JSArrayBufferView__offsetOfLength);
+#endif
 }
 
 // JSValue numbers-as-pointers are represented as a 52-bit integer
@@ -226,6 +286,25 @@ static uint64_t JSVALUE_TO_TYPED_ARRAY_LENGTH(EncodedJSValue val) {
 // This behavior change enables the JIT to handle it better
 // It also is better readability when console.log(myPtr)
 static void* JSVALUE_TO_PTR(EncodedJSValue val) {
+#if defined(BUN_FFI_JSVALUE32)
+  uint32_t tag = FFI32_TAG(val);
+  if (tag == FFI32_NULL_TAG)
+    return 0;
+
+  if (tag == FFI32_CELL_TAG) {
+    if (JSTYPE_IS_TYPED_ARRAY(GET_JSTYPE(val))) {
+      return JSVALUE_TO_TYPED_ARRAY_VECTOR(val);
+    }
+    return (void*)(uintptr_t)FFI32_PAYLOAD(val);
+  }
+
+  if (tag == FFI32_INT32_TAG) {
+    return (void*)(uintptr_t)(int32_t)FFI32_PAYLOAD(val);
+  }
+
+  // Assume the JSValue is a double-encoded number
+  return (void*)(uintptr_t)val.asDouble;
+#else
   if (val.asInt64 == TagValueNull)
     return 0;
 
@@ -240,17 +319,26 @@ static void* JSVALUE_TO_PTR(EncodedJSValue val) {
   // Assume the JSValue is a double
   val.asInt64 -= DoubleEncodeOffset;
   return (void*)(uintptr_t)val.asDouble;
+#endif
 }
 
 static EncodedJSValue PTR_TO_JSVALUE(void* ptr) {
   EncodedJSValue val;
   if (ptr == 0) {
+#if defined(BUN_FFI_JSVALUE32)
+    val.asInt64 = FFI32_MAKE(FFI32_NULL_TAG, 0);
+#else
     val.asInt64 = TagValueNull;
+#endif
     return val;
   }
 
+  // Encode pointers as number (double) values — 32-bit pointers are exact in a
+  // double, so JS sees the address as a plain number in both JSValue modes.
   val.asDouble = (double)(uintptr_t)ptr;
+#if !defined(BUN_FFI_JSVALUE32)
   val.asInt64 += DoubleEncodeOffset;
+#endif
   return val;
 }
 
@@ -262,30 +350,35 @@ static EncodedJSValue DOUBLE_TO_JSVALUE(double val) {
    if (val != val) {
      res.asInt64 = PureNaN;
    }
+#if !defined(BUN_FFI_JSVALUE32)
    res.asInt64 += DoubleEncodeOffset;
+#endif
    return res;
 }
 
 static int32_t JSVALUE_TO_INT32(EncodedJSValue val) {
+#if defined(BUN_FFI_JSVALUE32)
+  return (int32_t)FFI32_PAYLOAD(val);
+#else
   return val.asInt64;
+#endif
 }
 
 static EncodedJSValue INT32_TO_JSVALUE(int32_t val) {
    EncodedJSValue res;
+#if defined(BUN_FFI_JSVALUE32)
+   res.asInt64 = FFI32_MAKE(FFI32_INT32_TAG, (uint32_t)val);
+#else
    res.asInt64 = NumberTag | (uint32_t)val;
+#endif
    return res;
 }
 
 static EncodedJSValue UINT32_TO_JSVALUE(uint32_t val) {
-  EncodedJSValue res;
   if(val <= MAX_INT32) {
-    res.asInt64 = NumberTag | val;
-    return res;
+    return INT32_TO_JSVALUE((int32_t)val);
   } else {
-    EncodedJSValue res;
-    res.asDouble = val;
-    res.asInt64 += DoubleEncodeOffset;
-    return res;
+    return DOUBLE_TO_JSVALUE((double)val);
   }
 }
 
@@ -295,21 +388,28 @@ static EncodedJSValue FLOAT_TO_JSVALUE(float val) {
 
 static EncodedJSValue BOOLEAN_TO_JSVALUE(bool val) {
   EncodedJSValue res;
+#if defined(BUN_FFI_JSVALUE32)
+  res.asInt64 = FFI32_MAKE(FFI32_BOOL_TAG, val ? 1 : 0);
+#else
   res.asInt64 = val ? TagValueTrue : TagValueFalse;
+#endif
   return res;
 }
 
 
 static double JSVALUE_TO_DOUBLE(EncodedJSValue val) {
   // Numbers that fit in an int32 are int32-tagged, not double-encoded
-  // (see JSVALUE_TO_INT64). Subtracting DoubleEncodeOffset from an
-  // int32-tagged value yields an impure NaN, not the number.
   if (JSVALUE_IS_INT32(val)) {
     return (double)JSVALUE_TO_INT32(val);
   }
 
+#if defined(BUN_FFI_JSVALUE32)
+  // In USE_JSVALUE32_64 a double JSValue IS the double's IEEE bits.
+  return val.asDouble;
+#else
   val.asInt64 -= DoubleEncodeOffset;
   return val.asDouble;
+#endif
 }
 
 static float JSVALUE_TO_FLOAT(EncodedJSValue val) {
@@ -317,7 +417,11 @@ static float JSVALUE_TO_FLOAT(EncodedJSValue val) {
 }
 
 static bool JSVALUE_TO_BOOL(EncodedJSValue val) {
+#if defined(BUN_FFI_JSVALUE32)
+  return FFI32_TAG(val) == FFI32_BOOL_TAG && (FFI32_PAYLOAD(val) & 1);
+#else
   return val.asInt64 == TagValueTrue;
+#endif
 }
 
 

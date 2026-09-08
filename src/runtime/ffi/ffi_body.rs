@@ -2226,6 +2226,9 @@ impl Function {
             writer.write_all(b"#define HAS_ARGUMENTS\n")?;
         }
 
+        #[cfg(target_arch = "x86")]
+        writer.write_all(b"#define BUN_FFI_JSVALUE32 1\n")?;
+
         'brk: {
             if self.return_type.is_floating_point() {
                 writer.write_all(b"#define USES_FLOAT 1\n")?;
@@ -2388,6 +2391,9 @@ impl Function {
         }
 
         writer.write_all(b"#define IS_CALLBACK 1\n")?;
+
+        #[cfg(target_arch = "x86")]
+        writer.write_all(b"#define BUN_FFI_JSVALUE32 1\n")?;
 
         'brk: {
             if self.return_type.is_floating_point() {
@@ -2728,7 +2734,14 @@ impl CompilerRT {
         state.define_symbols(&[
             (
                 "Bun_FFI_PointerOffsetToArgumentsList",
-                bun_jsc::sizes::BUN_FFI_POINTER_OFFSET_TO_ARGUMENTS_LIST as i64,
+                // On 32-bit the JSC CallFrame starts the argument list at
+                // Register slot 5 (8-byte slots → byte 40), so in `size_t`
+                // units (4 bytes) the offset is 10, not the x64 value 6.
+                if cfg!(target_arch = "x86") {
+                    10
+                } else {
+                    bun_jsc::sizes::BUN_FFI_POINTER_OFFSET_TO_ARGUMENTS_LIST as i64
+                },
             ),
             (
                 "JSArrayBufferView__offsetOfLength",
