@@ -2634,6 +2634,81 @@ impl CompilerRT {
         }
     }
 
+    #[inline(never)]
+    extern "C" fn memmove(dest: *mut u8, source: *const u8, byte_count: usize) -> *mut u8 {
+        // SAFETY: caller (TCC-compiled code) guarantees valid ranges; overlaps allowed
+        unsafe {
+            core::ptr::copy(source, dest, byte_count);
+        }
+        dest
+    }
+
+    // 64-bit integer compiler-rt helpers for 32-bit x86. On i586 the TCC thunks
+    // lower f64<->i64 and 64-bit integer ops to these libcalls (e.g. the
+    // `(int64_t)JSVALUE_TO_DOUBLE(...)` casts in FFI.h). x86_64 compiles
+    // `libtcc1.c` instead, which natively has most of these; x86 has no native
+    // 64-bit arithmetic, so provide them here.
+    #[cfg(target_arch = "x86")]
+    #[inline(never)]
+    extern "C" fn fixdfdi(d: f64) -> i64 {
+        d as i64
+    }
+    #[cfg(target_arch = "x86")]
+    #[inline(never)]
+    extern "C" fn fixunsdfdi(d: f64) -> u64 {
+        d as u64
+    }
+    #[cfg(target_arch = "x86")]
+    #[inline(never)]
+    extern "C" fn floatdidf(v: i64) -> f64 {
+        v as f64
+    }
+    #[cfg(target_arch = "x86")]
+    #[inline(never)]
+    extern "C" fn floatundidf(v: u64) -> f64 {
+        v as f64
+    }
+    #[cfg(target_arch = "x86")]
+    #[inline(never)]
+    extern "C" fn muldi3(a: i64, b: i64) -> i64 {
+        a.wrapping_mul(b)
+    }
+    #[cfg(target_arch = "x86")]
+    #[inline(never)]
+    extern "C" fn udivdi3(a: u64, b: u64) -> u64 {
+        if b == 0 { 0 } else { a / b }
+    }
+    #[cfg(target_arch = "x86")]
+    #[inline(never)]
+    extern "C" fn divdi3(a: i64, b: i64) -> i64 {
+        if b == 0 { 0 } else { a.wrapping_div(b) }
+    }
+    #[cfg(target_arch = "x86")]
+    #[inline(never)]
+    extern "C" fn umoddi3(a: u64, b: u64) -> u64 {
+        if b == 0 { 0 } else { a % b }
+    }
+    #[cfg(target_arch = "x86")]
+    #[inline(never)]
+    extern "C" fn moddi3(a: i64, b: i64) -> i64 {
+        if b == 0 { 0 } else { a.wrapping_rem(b) }
+    }
+    #[cfg(target_arch = "x86")]
+    #[inline(never)]
+    extern "C" fn ashldi3(a: u64, b: i32) -> u64 {
+        a << (b as u32 & 63)
+    }
+    #[cfg(target_arch = "x86")]
+    #[inline(never)]
+    extern "C" fn ashrdi3(a: i64, b: i32) -> i64 {
+        a >> (b as u32 & 63)
+    }
+    #[cfg(target_arch = "x86")]
+    #[inline(never)]
+    extern "C" fn lshrdi3(a: u64, b: i32) -> u64 {
+        a >> (b as u32 & 63)
+    }
+
     pub(crate) fn define(state: &mut TCC::State) {
         #[cfg(target_arch = "x86_64")]
         {
@@ -2685,6 +2760,28 @@ impl CompilerRT {
         state
             .add_symbol(zstr!("memcpy"), Self::memcpy as *const c_void)
             .expect("unreachable");
+        state
+            .add_symbol(zstr!("memmove"), Self::memmove as *const c_void)
+            .expect("unreachable");
+        #[cfg(target_arch = "x86")]
+        {
+            state
+                .add_symbols(&[
+                    ("__fixdfdi", Self::fixdfdi as *const c_void),
+                    ("__fixunsdfdi", Self::fixunsdfdi as *const c_void),
+                    ("__floatdidf", Self::floatdidf as *const c_void),
+                    ("__floatundidf", Self::floatundidf as *const c_void),
+                    ("__muldi3", Self::muldi3 as *const c_void),
+                    ("__udivdi3", Self::udivdi3 as *const c_void),
+                    ("__divdi3", Self::divdi3 as *const c_void),
+                    ("__umoddi3", Self::umoddi3 as *const c_void),
+                    ("__moddi3", Self::moddi3 as *const c_void),
+                    ("__ashldi3", Self::ashldi3 as *const c_void),
+                    ("__ashrdi3", Self::ashrdi3 as *const c_void),
+                    ("__lshrdi3", Self::lshrdi3 as *const c_void),
+                ])
+                .expect("unreachable");
+        }
         // Re-declare the C++ NapiHandleScope hooks locally — the canonical
         // declarations live in `crate::napi::napi_body` which is private, and
         // we only need the symbol addresses to hand to TCC. The canonical

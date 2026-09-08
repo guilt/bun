@@ -578,3 +578,19 @@ EXPORTS
   node_api_create_external_sharedarraybuffer
   node_api_is_sharedarraybuffer
   dumpBtjsTrace
+
+; 32-bit x86 compiler-rt helpers provided by workaround-missing-symbols.cpp.
+; bun:ffi's JIT thunks reference these for f64/i64 and 64-bit integer ops on
+; i586; exporting them lets the JIT linker resolve them via GetProcAddress.
+  __fixdfdi
+  __fixunsdfdi
+  __floatdidf
+  __floatundidf
+  __udivdi3
+  __divdi3
+  __umoddi3
+  __moddi3
+  __muldi3
+  __ashldi3
+  __ashrdi3
+  __lshrdi3

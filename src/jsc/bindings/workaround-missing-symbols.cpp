@@ -36,6 +36,29 @@ extern "C" int stat64(
     return _stat64(_FileName, _Stat);
 }
 
+// ── 32-bit x86: compiler-rt builtins used by bun:ffi's Zig thunks ─────────────
+// bun:ffi's JIT thunks on i586 are Zig-generated and call the clang-gnu ABI
+// helper names (__fixdfdi, __udivdi3, ...) for f64/i64 and 64-bit integer
+// ops. clang-cl links MSVC's CRT (which only exports the _ftol2/_alldiv
+// family), so these would otherwise be "unresolved reference to '__fixdfdi'"
+// when a native function with an f64/i64 signature is bound. clang-cl inlines
+// the f64<->i64 conversions (SSE2, pentium4) and lowers the 64-bit integer
+// ops to the MSVC CRT helpers, so these bodies don't recurse.
+#if defined(_M_IX86)
+extern "C" __int64 __fixdfdi(double d) { return (__int64)d; }
+extern "C" unsigned __int64 __fixunsdfdi(double d) { return (unsigned __int64)d; }
+extern "C" double __floatdidf(__int64 i) { return (double)i; }
+extern "C" double __floatundidf(unsigned __int64 i) { return (double)i; }
+extern "C" unsigned __int64 __udivdi3(unsigned __int64 a, unsigned __int64 b) { return a / b; }
+extern "C" __int64 __divdi3(__int64 a, __int64 b) { return a / b; }
+extern "C" unsigned __int64 __umoddi3(unsigned __int64 a, unsigned __int64 b) { return a % b; }
+extern "C" __int64 __moddi3(__int64 a, __int64 b) { return a % b; }
+extern "C" __int64 __muldi3(__int64 a, __int64 b) { return a * b; }
+extern "C" __int64 __ashldi3(__int64 a, unsigned int b) { return a << b; }
+extern "C" __int64 __ashrdi3(__int64 a, unsigned int b) { return a >> b; }
+extern "C" unsigned __int64 __lshrdi3(unsigned __int64 a, unsigned int b) { return a >> b; }
+#endif // _M_IX86
+
 extern "C" int kill(int pid, int sig)
 {
     return uv_kill(pid, sig);
