@@ -357,10 +357,21 @@ static EncodedJSValue DOUBLE_TO_JSVALUE(double val) {
 }
 
 static int32_t JSVALUE_TO_INT32(EncodedJSValue val) {
+  if (JSVALUE_IS_INT32(val)) {
 #if defined(BUN_FFI_JSVALUE32)
-  return (int32_t)FFI32_PAYLOAD(val);
+    return (int32_t)FFI32_PAYLOAD(val);
 #else
-  return val.asInt64;
+    return (int32_t)val.asInt64;
+#endif
+  }
+
+  // The engine may hand a number to the thunk as a double-encoded JSValue even
+  // when it fits in an int32 (e.g. some u32 args arrive as doubles on 32-bit).
+#if defined(BUN_FFI_JSVALUE32)
+  return (int32_t)val.asDouble;
+#else
+  val.asInt64 -= DoubleEncodeOffset;
+  return (int32_t)val.asDouble;
 #endif
 }
 

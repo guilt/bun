@@ -225,16 +225,27 @@ impl ABIType {
 
     /// Types that we can directly pass through as an `int64_t`
     pub fn needs_a_cast_in_c(self) -> bool {
-        !matches!(
-            self,
-            ABIType::Char
-                | ABIType::Int8T
-                | ABIType::Uint8T
-                | ABIType::Int16T
-                | ABIType::Uint16T
-                | ABIType::Int32T
-                | ABIType::Uint32T
-        )
+        #[cfg(target_arch = "x86")]
+        {
+            // On 32-bit x86, TinyCC miscompiles passing the raw `int64_t`
+            // JSValue bits straight into a C int-sized parameter (the native
+            // receives 0). Always decode through `JSVALUE_TO_INT32` instead,
+            // which yields the exact payload for int32-tagged values.
+            return true;
+        }
+        #[cfg(not(target_arch = "x86"))]
+        {
+            !matches!(
+                self,
+                ABIType::Char
+                    | ABIType::Int8T
+                    | ABIType::Uint8T
+                    | ABIType::Int16T
+                    | ABIType::Uint16T
+                    | ABIType::Int32T
+                    | ABIType::Uint32T
+            )
+        }
     }
 
     pub fn is_floating_point(self) -> bool {
